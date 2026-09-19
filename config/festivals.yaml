@@ -1,0 +1,550 @@
+# Panchang Clock -- festival list
+# Adapted from https://github.com/vibzart/panchang (MIT-style open data),
+# ported to match our engine's own numbering exactly:
+#   lunar_month: AMANT numbering, 1=Chaitra ... 12=Phalguna (same as
+#     engine/masa.py's MASA_NAMES list -- no conversion needed)
+#   tithi: 1-30 raw (1-15=Shukla, 16-30=Krishna) -- same as
+#     engine/panchang.py's get_tithi_number() output directly
+#   sankranti_index: 0=Makar,1=Kumbha,2=Meena,3=Mesha,4=Vrishabha,
+#     5=Mithuna,6=Karka,7=Simha,8=Kanya,9=Tula,10=Vrischika,11=Dhanu
+#     (NOTE: this is offset from our own Rashi order, which starts at
+#     Mesha=0 -- engine/festivals.py converts between the two)
+#
+# NOT YET HANDLED (flagged, not silently wrong):
+#   - Fine-grained observance-timing rules (vyapti/kaala/priority in the
+#     source) -- e.g. "which of two candidate days wins" when a tithi
+#     spans a sunrise boundary. This engine only checks the tithi
+#     prevailing AT today's sunrise, the simplest/most common rule.
+#   - Adhik Masa: festivals are simply skipped during an Adhik month
+#     (common real-world practice), not shifted to the nija month.
+#   - Regional filtering (regions: field) -- all festivals are matched
+#     regardless of region; add filtering later if wanted.
+#
+# Editable: add or remove entries freely, no code changes needed.
+
+festivals:
+  # Sankranti-based
+  - id: makar_sankranti
+    name: Makar Sankranti
+    rule: sankranti
+    sankranti_index: 0
+    aliases: [Magh Bihu, Uttarayan]
+  - id: baisakhi
+    name: Baisakhi
+    rule: sankranti
+    sankranti_index: 3
+    aliases: [Vishu, Puthandu, Pohela Boishakh, Bihu]
+  - id: karka_sankranti
+    name: Karka Sankranti
+    rule: sankranti
+    sankranti_index: 6
+
+  # Pausha (10)
+  - id: sakat_chauth
+    name: Sakat Chauth
+    rule: tithi_at_sunrise
+    lunar_month: 10
+    tithi: 19
+  - id: putrada_ekadashi_pausha
+    name: Putrada Ekadashi
+    rule: tithi_at_sunrise
+    lunar_month: 10
+    tithi: 11
+    # Putrada Ekadashi occurs twice a year -- this is the Pausha
+    # occurrence; see putrada_ekadashi_shravana below for the other.
+
+  # Magha (11)
+  - id: vasant_panchami
+    name: Vasant Panchami
+    rule: tithi_at_sunrise
+    lunar_month: 11
+    tithi: 5
+    aliases: [Saraswati Puja, Basant Panchami]
+  - id: ratha_saptami
+    name: Ratha Saptami
+    rule: tithi_at_sunrise
+    lunar_month: 11
+    tithi: 7
+  - id: bhishma_ashtami
+    name: Bhishma Ashtami
+    rule: tithi_at_sunrise
+    lunar_month: 11
+    tithi: 8
+  - id: maha_shivaratri
+    name: Maha Shivaratri
+    rule: tithi_at_sunrise
+    lunar_month: 11
+    tithi: 29
+
+  # Phalguna (12)
+  - id: holika_dahan
+    name: Holika Dahan
+    rule: tithi_at_sunrise
+    lunar_month: 12
+    tithi: 14
+  - id: holi
+    name: Holi
+    rule: tithi_at_sunrise
+    lunar_month: 12
+    tithi: 15
+    aliases: [Dhulandi, Rangwali Holi, Dol Jatra]
+
+  # Chaitra (1)
+  - id: ugadi
+    name: Ugadi
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 1
+    aliases: [Yugadi]
+  - id: gudi_padwa
+    name: Gudi Padwa
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 1
+  - id: cheti_chand
+    name: Cheti Chand
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 1
+  - id: gauri_teej
+    name: Gauri Teej
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 3
+    aliases: [Gangaur]
+  - id: ram_navami
+    name: Ram Navami
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 9
+  - id: mahavir_jayanti
+    name: Mahavir Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 13
+  - id: hanuman_jayanti
+    name: Hanuman Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 15
+  - id: chaitra_purnima
+    name: Chaitra Purnima
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 15
+    aliases: [Chitra Pournami]
+  - id: chaitra_navaratri
+    name: Chaitra Navaratri
+    rule: tithi_at_sunrise
+    lunar_month: 1
+    tithi: 1
+    aliases: [Vasant Navaratri]
+
+  # Vaishakha (2)
+  - id: akshaya_tritiya
+    name: Akshaya Tritiya
+    rule: tithi_at_sunrise
+    lunar_month: 2
+    tithi: 3
+    aliases: [Akha Teej]
+  - id: parashurama_jayanti
+    name: Parashurama Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 2
+    tithi: 3
+  - id: sita_navami
+    name: Sita Navami
+    rule: tithi_at_sunrise
+    lunar_month: 2
+    tithi: 9
+    aliases: [Janaki Navami]
+  - id: narasimha_jayanti
+    name: Narasimha Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 2
+    tithi: 14
+  - id: buddha_purnima
+    name: Buddha Purnima
+    rule: tithi_at_sunrise
+    lunar_month: 2
+    tithi: 15
+    aliases: [Vesak, Buddha Jayanti]
+  - id: shani_jayanti
+    name: Shani Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 2
+    tithi: 30
+    aliases: [Shani Amavasya]
+
+  # Jyeshtha (3)
+  - id: ganga_dussehra
+    name: Ganga Dussehra
+    rule: tithi_at_sunrise
+    lunar_month: 3
+    tithi: 10
+  - id: vat_savitri
+    name: Vat Savitri
+    rule: tithi_at_sunrise
+    lunar_month: 3
+    tithi: 30
+    aliases: [Vat Purnima]
+
+  # Ashadha (4)
+  - id: jagannath_rath_yatra
+    name: Jagannath Rath Yatra
+    rule: tithi_at_sunrise
+    lunar_month: 4
+    tithi: 2
+  - id: guru_purnima
+    name: Guru Purnima
+    rule: tithi_at_sunrise
+    lunar_month: 4
+    tithi: 15
+    aliases: [Vyasa Purnima]
+
+  # Shravana (5)
+  - id: nag_panchami
+    name: Nag Panchami
+    rule: tithi_at_sunrise
+    lunar_month: 5
+    tithi: 5
+  - id: hariyali_teej
+    name: Hariyali Teej
+    rule: tithi_at_sunrise
+    lunar_month: 5
+    tithi: 3
+    aliases: [Sawan Teej]
+  - id: raksha_bandhan
+    name: Raksha Bandhan
+    rule: tithi_at_sunrise
+    lunar_month: 5
+    tithi: 15
+    aliases: [Rakhi]
+  - id: janmashtami
+    name: Janmashtami
+    rule: tithi_at_sunrise
+    lunar_month: 5
+    tithi: 23
+    aliases: [Krishna Janmashtami, Gokulashtami]
+
+  # Bhadrapada (6)
+  - id: kajari_teej
+    name: Kajari Teej
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 3
+    aliases: [Badi Teej]
+  - id: hartalika_teej
+    name: Hartalika Teej
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 3
+  - id: ganesh_chaturthi
+    name: Ganesh Chaturthi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 4
+    aliases: [Vinayaka Chaturthi]
+  - id: rishi_panchami
+    name: Rishi Panchami
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 5
+  - id: radha_ashtami
+    name: Radha Ashtami
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 8
+  - id: vaman_jayanti
+    name: Vaman Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 12
+  - id: anant_chaturdashi
+    name: Anant Chaturdashi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 14
+
+  # Pitrupaksh (Shraddha Paksha) -- Bhadrapada Shukla Purnima through
+  # the Krishna Paksha fortnight that follows (Purnimanta "Ashwin" --
+  # the Purnimanta name shifts forward during Krishna Paksha even
+  # though the underlying Amanta month, used for matching here, is
+  # still Bhadrapada/6 throughout). Added per user request, 15 new
+  # entries (tithi 15-29); tithi 30 is the existing mahalaya_amavasya
+  # entry below, left as-is/unrenamed per user request.
+  - id: pitrupaksh_purnima
+    name: Pitrupaksh Purnima
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 15
+  - id: pitrupaksh_pratipada
+    name: Pitrupaksh Pratipada
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 16
+  - id: pitrupaksh_dwitiya
+    name: Pitrupaksh Dwitiya
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 17
+  - id: pitrupaksh_tritiya
+    name: Pitrupaksh Tritiya
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 18
+  - id: pitrupaksh_chaturthi
+    name: Pitrupaksh Chaturthi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 19
+  - id: pitrupaksh_panchami
+    name: Pitrupaksh Panchami
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 20
+  - id: pitrupaksh_shashthi
+    name: Pitrupaksh Shashthi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 21
+  - id: pitrupaksh_saptami
+    name: Pitrupaksh Saptami
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 22
+  - id: pitrupaksh_ashtami
+    name: Pitrupaksh Ashtami
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 23
+  - id: pitrupaksh_navami
+    name: Pitrupaksh Navami
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 24
+  - id: pitrupaksh_dashami
+    name: Pitrupaksh Dashami
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 25
+  - id: pitrupaksh_ekadashi
+    name: Pitrupaksh Ekadashi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 26
+  - id: pitrupaksh_dwadashi
+    name: Pitrupaksh Dwadashi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 27
+  - id: pitrupaksh_trayodashi
+    name: Pitrupaksh Trayodashi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 28
+  - id: pitrupaksh_chaturdashi
+    name: Pitrupaksh Chaturdashi
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 29
+
+  - id: mahalaya_amavasya
+    name: Mahalaya Amavasya
+    rule: tithi_at_sunrise
+    lunar_month: 6
+    tithi: 30
+    aliases: [Sarva Pitru Amavasya, Mahalaya]
+
+  # Ashwin (7)
+  - id: navaratri_start
+    name: Sharad Navaratri
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 1
+    aliases: [Durga Puja begins]
+  - id: durga_ashtami
+    name: Durga Ashtami
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 8
+    aliases: [Maha Ashtami, Ayudha Puja]
+  - id: maha_navami
+    name: Maha Navami
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 9
+  - id: dussehra
+    name: Dussehra
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 10
+    aliases: [Vijayadashami]
+  - id: sharad_purnima
+    name: Sharad Purnima
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 15
+    aliases: [Kojagiri Purnima, Kumara Purnima]
+  - id: karva_chauth
+    name: Karva Chauth
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 19
+  - id: ahoi_ashtami
+    name: Ahoi Ashtami
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 23
+  - id: dhanteras
+    name: Dhanteras
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 28
+    aliases: [Dhantrayodashi, Dhanvantari Jayanti]
+  - id: narak_chaturdashi
+    name: Narak Chaturdashi
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 29
+    aliases: [Choti Diwali, Roop Chaturdashi]
+  - id: diwali
+    name: Diwali
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 30
+    aliases: [Deepavali]
+  - id: kali_puja
+    name: Kali Puja
+    rule: tithi_at_sunrise
+    lunar_month: 7
+    tithi: 30
+    aliases: [Shyama Puja]
+
+  # Kartik (8)
+  - id: govardhan_puja
+    name: Govardhan Puja
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 1
+    aliases: [Annakut, Bali Pratipada, Padwa]
+  - id: bhai_dooj
+    name: Bhai Dooj
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 2
+    aliases: [Bhai Tika, Bhai Bij, Yama Dvitiya]
+  - id: chhath_puja
+    name: Chhath Puja
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 6
+  - id: skanda_sashti
+    name: Skanda Sashti
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 6
+    aliases: [Kanda Sashti, Kartikeya Sashti]
+  - id: gopashtami
+    name: Gopashtami
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 8
+  - id: tulsi_vivah
+    name: Tulsi Vivah
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 11
+    aliases: [Tulsi Marriage]
+  - id: kartik_purnima
+    name: Kartik Purnima
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 15
+    aliases: [Tripuri Purnima, Dev Deepawali, Guru Nanak Jayanti]
+
+  # Margashirsha (9)
+  - id: gita_jayanti
+    name: Gita Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 9
+    tithi: 11
+  - id: dattatreya_jayanti
+    name: Dattatreya Jayanti
+    rule: tithi_at_sunrise
+    lunar_month: 9
+    tithi: 15
+
+  # Added per user request -- Ekadashis
+  - id: nirjala_ekadashi
+    name: Nirjala Ekadashi
+    rule: tithi_at_sunrise
+    lunar_month: 3
+    tithi: 11
+  - id: devshayani_ekadashi
+    name: Devshayani Ekadashi
+    rule: tithi_at_sunrise
+    lunar_month: 4
+    tithi: 11
+    aliases: [Ashadhi Ekadashi, Hari Shayani Ekadashi]
+  - id: devutthana_ekadashi
+    name: Devutthana Ekadashi
+    rule: tithi_at_sunrise
+    lunar_month: 8
+    tithi: 11
+    aliases: [Prabodhini Ekadashi, Dev Uthani Ekadashi]
+  - id: putrada_ekadashi_shravana
+    name: Putrada Ekadashi
+    rule: tithi_at_sunrise
+    lunar_month: 5
+    tithi: 11
+    # Putrada Ekadashi occurs twice a year -- this is the Shravana
+    # occurrence; see putrada_ekadashi_pausha above for the other.
+  - id: mokshada_ekadashi
+    name: Mokshada Ekadashi
+    rule: tithi_at_sunrise
+    lunar_month: 9
+    tithi: 11
+
+  # Added per user request -- named Amavasyas (specific month)
+  - id: mauni_amavasya
+    name: Mauni Amavasya
+    rule: tithi_at_sunrise
+    lunar_month: 11
+    tithi: 30
+  - id: vat_savitri_amavasya
+    name: Vat Savitri Amavasya
+    rule: tithi_at_sunrise
+    lunar_month: 3
+    tithi: 30
+  - id: hariyali_amavasya
+    name: Hariyali Amavasya
+    rule: tithi_at_sunrise
+    lunar_month: 5
+    tithi: 30
+  # RESOLVED: Sarva Pitru Amavasya is the SAME single event as
+  # mahalaya_amavasya above (which already carries it as an alias),
+  # not a separate festival. Confirmed via research: this Amavasya
+  # falls in Bhadrapada (month 6) under the Amanta convention this
+  # engine uses throughout, and is called "Ashwin Amavasya" only
+  # under the Purnimanta convention (more common in North India) --
+  # same astronomical day, different month-naming system. A
+  # separate month-7 entry was added earlier and has been removed
+  # since it would have computed a genuinely different, later
+  # Amavasya under our Amanta numbering.
+
+  # Added per user request -- weekday-dependent Amavasyas (any month)
+  - id: somavati_amavasya
+    name: Somavati Amavasya
+    rule: tithi_and_weekday
+    tithi: 30
+    vara: Somvar
+  - id: shani_amavasya_weekday
+    name: Shani Amavasya
+    rule: tithi_and_weekday
+    tithi: 30
+    vara: Shanivar
+    # NOTE: distinct from shani_jayanti above (aliased "Shani
+    # Amavasya"), which is a FIXED Vaishakha-month Amavasya. This one
+    # is the broader "any Amavasya landing on a Saturday" rule the
+    # user asked for -- genuinely different despite the similar name.

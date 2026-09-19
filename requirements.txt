@@ -1,0 +1,7 @@
+# Panchang Clock -- Python dependencies
+# Freeze exact versions once development starts (pip freeze > requirements.txt)
+
+pyswisseph
+PyQt5
+gpiozero
+PyYAML

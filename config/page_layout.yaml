@@ -1,0 +1,90 @@
+# Panchang Clock -- element-to-page mapping
+# Move an element between pages/panels by editing its "page" value
+# here (and moving its entry between lists) -- no code changes needed
+# for WHERE something appears. What VALUE it shows is still computed
+# in Python (ui/page_*.py), since that needs real engine calls.
+#
+# detail_lines: how many small secondary lines appear below the main
+# value (0 = none, 1 = a single "(start to end)" style line, 2 = used
+# by Eclipse: type on the main line, then two detail lines).
+
+page_home:
+  - key: tithi
+    heading: Tithi
+    detail_lines: 1
+  - key: vara
+    heading: Vara
+    detail_lines: 0
+  - key: paksha
+    heading: Paksha
+    detail_lines: 0
+  - key: masa
+    heading: Masa
+    detail_lines: 0
+  - key: ritu
+    heading: Ritu
+    detail_lines: 0
+  - key: vikram_samvat
+    heading: Vikrami Samvat
+    detail_lines: 0
+  - key: samvatsara
+    heading: Samvatsara
+    detail_lines: 0
+  - key: muhurta
+    heading: Muhurta
+    detail_lines: 0
+  - key: pahar
+    heading: Pahar
+    detail_lines: 0
+
+page_panchang_left:
+  - key: nakshatra
+    heading: Nakshatra
+    detail_lines: 1
+  - key: yoga
+    heading: Yoga
+    detail_lines: 1
+  - key: karana
+    heading: Karana
+    detail_lines: 1
+  - key: chandra_rashi
+    heading: Chandra Rashi
+    detail_lines: 1
+  - key: surya_rashi
+    heading: Surya Rashi
+    detail_lines: 1
+  - key: abhijit
+    heading: Abhijit Muhurta
+    detail_lines: 1
+  - key: brahma
+    heading: Brahma Muhurta
+    detail_lines: 1
+  - key: ayana
+    heading: Ayana
+    detail_lines: 0
+
+page_panchang_right:
+  - key: sunrise
+    heading: Sunrise
+    detail_lines: 0
+  - key: sunset
+    heading: Sunset
+    detail_lines: 0
+  - key: moonrise
+    heading: Moonrise
+    detail_lines: 0
+  - key: moonset
+    heading: Moonset
+    detail_lines: 0
+  - key: dinman
+    heading: Dinman (Day)
+    detail_lines: 0
+  - key: ratriman
+    heading: Ratriman (Night)
+    detail_lines: 0
+  - key: day_length
+    heading: Day Length
+    detail_lines: 0
+  - key: eclipse
+    heading: Eclipse
+    detail_lines: 2

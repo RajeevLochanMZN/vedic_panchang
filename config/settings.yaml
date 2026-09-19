@@ -1,0 +1,12 @@
+# Panchang Clock -- location & general settings
+
+location:
+  name: "Ujjain"          # default location
+  latitude: 23.1765
+  longitude: 75.7885
+  timezone_offset_hours: 5.5   # IST, fixed, no DST
+
+ayanamsa: "lahiri"
+
+display:
+  page_rotation_seconds: 12     # auto-swap interval (Button 5 toggles on/off)
