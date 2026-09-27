@@ -89,12 +89,20 @@ class MainWindowHi(QMainWindow):
         # NOTE: this only works when actually running on the Pi
         # itself (needs real GPIO hardware) -- it will fail if this
         # file is ever run on a plain PC.
-        self.button_controller = ButtonController(
-            home_callback=lambda: self.go_to_page(1),
-            panchang_callback=lambda: self.go_to_page(2),
-            calendar_callback=lambda: self.go_to_page(3),
-            wifi_setup_callback=_placeholder_wifi_setup,
-        )
+        #
+        # IMPORTANT: .connect(), not constructor callbacks -- see
+        # hardware/buttons.py's module docstring for why. In short:
+        # gpiozero fires button events on its own background thread,
+        # and calling Qt GUI code (like go_to_page, which touches
+        # self.stacked_widget) directly from that thread crashed the
+        # app outright (a segfault was hit during testing). Signals
+        # connected this way are safely queued onto the main GUI
+        # thread by Qt automatically instead.
+        self.button_controller = ButtonController()
+        self.button_controller.home_pressed.connect(lambda: self.go_to_page(1))
+        self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
+        self.button_controller.calendar_pressed.connect(lambda: self.go_to_page(3))
+        self.button_controller.wifi_setup_pressed.connect(_placeholder_wifi_setup)
 
     def go_to_page(self, page_number: int):
         """page_number is 1-3, matching Button 1-3. Identical to
