@@ -29,22 +29,50 @@ cheap mechanical switches) -- gpiozero's bounce_time parameter below
 filters this so each physical press reliably fires its callback
 exactly once.
 
-DESIGN: this module does NOT hardcode navigation logic itself -- it
-takes four callback functions (one per button) and wires GPIO events
-to them. This keeps it decoupled from main_window.py's internals
-(so it doesn't need to know the exact method names used there) and
-means these buttons genuinely act as a SECOND INPUT PATH to the
-exact same navigation the on-screen QPushButtons already trigger,
-not a separate/parallel implementation of page-switching.
+CRITICAL DESIGN NOTE -- QT SIGNALS, NOT PLAIN CALLBACKS: an earlier
+version of this file took plain Python callback functions and called
+them directly from gpiozero's when_pressed. That crashed the real
+app with a segfault ("QObject::setParent: Cannot set parent, new
+parent is in a different thread") the moment a button press tried to
+touch a Qt widget (e.g. switching pages via QStackedWidget). Root
+cause: gpiozero fires when_pressed callbacks on ITS OWN internal
+background thread (used for GPIO edge detection), but Qt widgets can
+ONLY be safely touched from the main GUI thread -- calling GUI code
+directly from a background thread is not just discouraged, Qt
+actively refuses it and can crash outright rather than risk silent
+corruption.
 
-Button 4 (Wi-Fi Setup) is wired up the same way as the other three,
-but its actual callback is still a placeholder below -- the real
-Wi-Fi hotspot + custom setup-page feature hasn't been built yet
-(separate, larger piece of work). Swap in the real function once
-that exists.
+THE FIX: ButtonController is a QObject with one pyqtSignal per
+button. gpiozero's when_pressed just emits the signal (thread-safe
+-- emitting a signal is fine from any thread) instead of calling
+navigation code directly. Whatever connects to these signals (e.g.
+main_window_hi.py, via .connect()) gets its slot called through
+Qt's own event queue instead -- when a signal crosses threads, Qt
+automatically delivers it as a QUEUED connection, meaning the actual
+slot code runs safely on the main thread's event loop, not on
+gpiozero's thread. This is the standard, correct pattern for mixing
+gpiozero (or any background-thread event source) with PyQt5.
+
+Usage (from main_window_hi.py, or main_window.py):
+    from hardware.buttons import ButtonController
+    self.button_controller = ButtonController()  # keep as self.X, see below
+    self.button_controller.home_pressed.connect(lambda: self.go_to_page(1))
+    self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
+    self.button_controller.calendar_pressed.connect(lambda: self.go_to_page(3))
+    self.button_controller.wifi_setup_pressed.connect(self.enter_wifi_setup_mode)
+(Last line illustrative -- connect to whatever the real Wi-Fi Setup
+method ends up being called, once that feature exists; until then,
+_placeholder_wifi_setup below is a reasonable stand-in.)
+
+IMPORTANT: keep the ButtonController instance as an attribute on
+something long-lived (e.g. self.button_controller on the main
+window), never a local variable that goes out of scope -- both
+gpiozero's Button objects AND the Qt signal connections stop working
+once the ButtonController itself gets garbage-collected.
 """
 
 from gpiozero import Button
+from PyQt5.QtCore import QObject, pyqtSignal
 
 # GPIO pin numbers (BCM numbering, matching gpiozero's convention --
 # NOT the physical pin numbers on the 40-pin header). Chosen to
@@ -63,36 +91,37 @@ PIN_WIFI_SETUP = 23
 BOUNCE_TIME = 0.1
 
 
-class ButtonController:
+class ButtonController(QObject):
     """
-    Wires the 4 physical buttons to the given callback functions.
-    Construct ONE instance of this (e.g. in main_window.py's
-    __init__) and keep a reference to it for the lifetime of the
-    app -- if the instance is garbage-collected, gpiozero stops
+    Wires the 4 physical buttons to Qt signals (see the module
+    docstring above for why signals, not plain callbacks). Construct
+    ONE instance of this and keep a reference to it for the lifetime
+    of the app (e.g. self.button_controller in the main window's
+    __init__) -- if the instance is garbage-collected, gpiozero stops
     listening for button presses.
-
-    Usage (from main_window.py, once wired up there):
-        from hardware.buttons import ButtonController
-        self.button_controller = ButtonController(
-            home_callback=self.show_home_page,
-            panchang_callback=self.show_panchang_page,
-            calendar_callback=self.show_calendar_page,
-            wifi_setup_callback=self.enter_wifi_setup_mode,
-        )
-    (Exact method names above are illustrative -- use whatever
-    main_window.py's real navigation methods are actually called.)
     """
 
-    def __init__(self, home_callback, panchang_callback, calendar_callback, wifi_setup_callback):
+    home_pressed = pyqtSignal()
+    panchang_pressed = pyqtSignal()
+    calendar_pressed = pyqtSignal()
+    wifi_setup_pressed = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
         self.home_button = Button(PIN_HOME, bounce_time=BOUNCE_TIME)
         self.panchang_button = Button(PIN_PANCHANG, bounce_time=BOUNCE_TIME)
         self.calendar_button = Button(PIN_CALENDAR, bounce_time=BOUNCE_TIME)
         self.wifi_setup_button = Button(PIN_WIFI_SETUP, bounce_time=BOUNCE_TIME)
 
-        self.home_button.when_pressed = home_callback
-        self.panchang_button.when_pressed = panchang_callback
-        self.calendar_button.when_pressed = calendar_callback
-        self.wifi_setup_button.when_pressed = wifi_setup_callback
+        # .emit is thread-safe to call from gpiozero's background
+        # thread -- this is the whole point of the fix (see module
+        # docstring). Do NOT change these back to calling arbitrary
+        # functions directly.
+        self.home_button.when_pressed = self.home_pressed.emit
+        self.panchang_button.when_pressed = self.panchang_pressed.emit
+        self.calendar_button.when_pressed = self.calendar_pressed.emit
+        self.wifi_setup_button.when_pressed = self.wifi_setup_pressed.emit
 
 
 def _placeholder_wifi_setup():
@@ -107,17 +136,24 @@ def _placeholder_wifi_setup():
 # =============================================================================
 # Standalone test -- run directly on the Pi to check all 4 buttons
 # without needing the full app: `python3 hardware/buttons.py`
+#
+# Uses a minimal QCoreApplication (not a full QApplication -- no GUI
+# needed for this test) so Qt's signal/slot event delivery actually
+# runs; without SOME Qt event loop pumping, a queued cross-thread
+# signal connection has nothing to deliver it and would just sit
+# unprocessed forever.
 # =============================================================================
 
 if __name__ == "__main__":
-    from signal import pause
+    from PyQt5.QtCore import QCoreApplication
 
-    controller = ButtonController(
-        home_callback=lambda: print("Button 1 (Home) pressed"),
-        panchang_callback=lambda: print("Button 2 (Panchang) pressed"),
-        calendar_callback=lambda: print("Button 3 (Calendar) pressed"),
-        wifi_setup_callback=_placeholder_wifi_setup,
-    )
+    app = QCoreApplication([])
+
+    controller = ButtonController()
+    controller.home_pressed.connect(lambda: print("Button 1 (Home) pressed"))
+    controller.panchang_pressed.connect(lambda: print("Button 2 (Panchang) pressed"))
+    controller.calendar_pressed.connect(lambda: print("Button 3 (Calendar) pressed"))
+    controller.wifi_setup_pressed.connect(_placeholder_wifi_setup)
 
     print("Press each button... Ctrl+C to stop")
-    pause()
+    app.exec_()
