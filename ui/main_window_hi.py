@@ -39,7 +39,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 from ephemeris import init_ephemeris
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hardware"))
-from buttons import ButtonController, _placeholder_wifi_setup
+from buttons import ButtonController
+from wifi_setup import enter_wifi_setup_mode
 
 from page_home_hi import PageHomeHi
 from page_panchang_hi import PagePanchangHi
@@ -102,7 +103,7 @@ class MainWindowHi(QMainWindow):
         self.button_controller.home_pressed.connect(lambda: self.go_to_page(1))
         self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
         self.button_controller.calendar_pressed.connect(lambda: self.go_to_page(3))
-        self.button_controller.wifi_setup_pressed.connect(_placeholder_wifi_setup)
+        self.button_controller.wifi_setup_pressed.connect(enter_wifi_setup_mode)
 
     def go_to_page(self, page_number: int):
         """page_number is 1-3, matching Button 1-3. Identical to
