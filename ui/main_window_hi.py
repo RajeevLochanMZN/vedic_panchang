@@ -38,6 +38,9 @@ from PyQt5.QtCore import Qt
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "engine"))
 from ephemeris import init_ephemeris
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hardware"))
+from buttons import ButtonController, _placeholder_wifi_setup
+
 from page_home_hi import PageHomeHi
 from page_panchang_hi import PagePanchangHi
 from page_calendar_hi import PageCalendarHi
@@ -73,6 +76,25 @@ class MainWindowHi(QMainWindow):
         main_layout.addWidget(self._build_banner_row())
         central.setLayout(main_layout)
         self.setCentralWidget(central)
+
+        # Wires the 4 physical hardware buttons to this window's own
+        # go_to_page() -- the SAME method the old on-screen buttons
+        # used to call, now the only way pages are switched since the
+        # banner replaced them. self.button_controller MUST be kept
+        # as an instance attribute (not a local variable) -- gpiozero
+        # stops listening for button presses if this object gets
+        # garbage-collected. Wi-Fi Setup (button 4) still uses the
+        # placeholder from hardware/buttons.py until that feature is
+        # built -- swap it for the real function once it exists.
+        # NOTE: this only works when actually running on the Pi
+        # itself (needs real GPIO hardware) -- it will fail if this
+        # file is ever run on a plain PC.
+        self.button_controller = ButtonController(
+            home_callback=lambda: self.go_to_page(1),
+            panchang_callback=lambda: self.go_to_page(2),
+            calendar_callback=lambda: self.go_to_page(3),
+            wifi_setup_callback=_placeholder_wifi_setup,
+        )
 
     def go_to_page(self, page_number: int):
         """page_number is 1-3, matching Button 1-3. Identical to
