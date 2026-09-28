@@ -182,6 +182,28 @@ def _finish_setup_and_reboot(ssid: str, password: str, location_name: str,
 # The setup form itself (Flask)
 # =============================================================================
 
+def _degrees_minutes_to_decimal(degrees_text: str, minutes_text: str, max_degrees: int) -> float:
+    """
+    Convert a degrees + minutes pair (as typed into the setup form,
+    e.g. 29 and 28 for 29 deg 28 min) into the decimal degrees the
+    rest of the project uses (29.4667). Raises ValueError with a
+    readable message if anything is out of range. The form only asks
+    for North latitude / East longitude (positive values) -- correct
+    for India, which is this project's whole scope; southern/western
+    hemispheres would need a sign or hemisphere selector added.
+    """
+    degrees = float(degrees_text)
+    minutes = float(minutes_text)
+    if not (0 <= degrees <= max_degrees):
+        raise ValueError(f"degrees must be between 0 and {max_degrees}")
+    if not (0 <= minutes < 60):
+        raise ValueError("minutes must be between 0 and 59.99")
+    decimal = degrees + minutes / 60.0
+    if decimal > max_degrees:
+        raise ValueError(f"value is beyond {max_degrees} degrees")
+    return round(decimal, 4)  # 4 decimal places is about 11 metres, plenty
+
+
 _flask_app = Flask(__name__)
 
 
@@ -215,11 +237,13 @@ def _show_form():
             <label>Location Name</label>
             <input type="text" name="location_name" required>
 
-            <label>Latitude</label>
-            <input type="text" name="latitude" required>
+            <label>Latitude (North)</label>
+            <input type="number" name="lat_deg" placeholder="Degrees, e.g. 29" min="0" max="90" step="1" required>
+            <input type="number" name="lat_min" placeholder="Minutes, e.g. 28" min="0" max="59.99" step="any" required>
 
-            <label>Longitude</label>
-            <input type="text" name="longitude" required>
+            <label>Longitude (East)</label>
+            <input type="number" name="lon_deg" placeholder="Degrees, e.g. 77" min="0" max="180" step="1" required>
+            <input type="number" name="lon_min" placeholder="Minutes, e.g. 42" min="0" max="59.99" step="any" required>
 
             <button type="submit">Save and Connect</button>
         </form>
@@ -235,10 +259,10 @@ def _handle_submit():
     location_name = request.form["location_name"]
 
     try:
-        latitude = float(request.form["latitude"])
-        longitude = float(request.form["longitude"])
-    except ValueError:
-        return "Latitude and longitude must be numbers. Go back and try again.", 400
+        latitude = _degrees_minutes_to_decimal(request.form["lat_deg"], request.form["lat_min"], max_degrees=90)
+        longitude = _degrees_minutes_to_decimal(request.form["lon_deg"], request.form["lon_min"], max_degrees=180)
+    except ValueError as e:
+        return f"Please check the latitude/longitude values ({e}). Go back and try again.", 400
 
     # Do the actual network switch + reboot on a background thread,
     # AFTER this response is sent -- see module docstring for why.
