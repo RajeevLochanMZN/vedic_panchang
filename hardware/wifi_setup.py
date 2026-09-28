@@ -31,6 +31,13 @@ DESIGN (agreed with the user):
     bare http.server -- explicit trade-off the user chose, given
     basic Python fluency.
 
+LOGGING + ORDER OF OPERATIONS: every step is written to
+data/wifi_setup.log (never the Wi-Fi password). The location is saved
+BEFORE any network switching (it doesn't depend on the network), and
+the Pi only reboots once the entered network was actually joined --
+after a failed join it rejoins a known network instead of being left
+stranded. See _finish_setup_and_reboot().
+
 PREREQUISITES the future setup script still needs to add (same
 pattern as hardware/rtc.py's sudoers requirement):
   1. `pip install flask` inside the venv (added to requirements.txt).
@@ -70,6 +77,7 @@ import re
 import subprocess
 import threading
 import time
+import traceback
 
 from flask import Flask, request
 
@@ -87,17 +95,51 @@ SETTINGS_YAML_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "config", "settings.yaml"
 )
 
+# How many times to try joining the entered network before giving up.
+# Right after the hotspot is torn down the Wi-Fi scan list is often
+# empty for a few seconds, so the first attempt can fail with "no
+# network with that name" even though the network is right there.
+CONNECT_ATTEMPTS = 3
+
+# Everything this module does is also written here (never the Wi-Fi
+# password), so a failed attempt can be diagnosed afterwards even
+# when nobody was watching the terminal. Pi-generated -- keep it out
+# of git (add data/wifi_setup.log to .gitignore).
+LOG_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "data", "wifi_setup.log"
+)
+
 _setup_mode_active = False  # guards against double-entry if Button 4 is pressed twice
 _flask_started = False      # Flask's server thread only ever needs starting once per app run
 
 
-def _run(cmd: list) -> subprocess.CompletedProcess:
+def _log(message: str) -> None:
+    """Print a timestamped line AND append it to LOG_PATH. Logging must never be the thing that breaks the feature, so file errors are swallowed."""
+    line = f"{time.strftime('%Y-%m-%d %H:%M:%S')} [wifi_setup] {message}"
+    print(line, flush=True)
+    try:
+        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except Exception:
+        pass
+
+
+def _run(cmd: list, timeout: int = 30) -> subprocess.CompletedProcess:
     """
-    Small helper: run a command, always through sudo, never raise on
-    failure (caller checks .returncode) -- this module should log
-    problems rather than crash the whole app over a network hiccup.
+    Small helper: run a command, always through sudo, and NEVER raise
+    -- a timeout or any other failure comes back as a non-zero
+    .returncode (124 for a timeout) with the reason in .stderr, for
+    the caller to check and log. (An earlier version let
+    TimeoutExpired escape, which would have silently killed the
+    background thread doing the network switch.)
     """
-    return subprocess.run(["sudo"] + cmd, capture_output=True, text=True, timeout=30)
+    try:
+        return subprocess.run(["sudo"] + cmd, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, stdout="", stderr=f"timed out after {timeout}s")
+    except Exception as e:
+        return subprocess.CompletedProcess(cmd, 1, stdout="", stderr=str(e))
 
 
 def _start_hotspot() -> bool:
@@ -114,7 +156,7 @@ def _start_hotspot() -> bool:
         "password", HOTSPOT_PASSWORD,
     ])
     if result.returncode != 0:
-        print(f"[wifi_setup] Could not start hotspot: {result.stderr}")
+        _log(f"Could not start hotspot: {result.stderr.strip()}")
         return False
 
     # CRITICAL SAFETY: nmcli's hotspot command saves a persistent
@@ -125,8 +167,8 @@ def _start_hotspot() -> bool:
     # reboot.) Hotspot mode must ONLY ever be entered via Button 4.
     _run(["nmcli", "connection", "modify", HOTSPOT_CONNECTION_NAME, "connection.autoconnect", "no"])
 
-    print(f"[wifi_setup] Hotspot '{HOTSPOT_SSID}' active (password: {HOTSPOT_PASSWORD}). "
-          f"Connect a phone to it, then visit {SETUP_PAGE_URL}")
+    _log(f"Hotspot '{HOTSPOT_SSID}' active (password: {HOTSPOT_PASSWORD}). "
+         f"Connect a phone to it, then visit {SETUP_PAGE_URL}")
     return True
 
 
@@ -142,40 +184,67 @@ def _update_location_in_settings_yaml(name: str, latitude: float, longitude: flo
     with open(SETTINGS_YAML_PATH, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(f"[wifi_setup] settings.yaml location updated: {name} ({latitude}, {longitude})")
+    _log(f"settings.yaml location updated: {name} ({latitude}, {longitude})")
 
 
 def _finish_setup_and_reboot(ssid: str, password: str, location_name: str,
                               latitude: float, longitude: float) -> None:
     """
-    Runs a few seconds AFTER the success page has already been sent
-    to the phone's browser (see module docstring for why the delay
-    matters). Connects to the real Wi-Fi network, updates
-    settings.yaml, then reboots to apply everything cleanly.
+    Runs on a background thread a few seconds AFTER the success page
+    has already been sent to the phone's browser (see module docstring
+    for why the delay matters).
+
+    Order matters:
+      1. Save the location FIRST -- it has nothing to do with the
+         network, so a flaky Wi-Fi join must never cost the user
+         their location entry. (It also proves in the log that this
+         thread actually ran.)
+      2. Remove the setup hotspot and let the radio settle.
+      3. Join the entered network, rescanning first and retrying up
+         to CONNECT_ATTEMPTS times -- see CONNECT_ATTEMPTS above.
+      4. Only if the join succeeded: reboot to apply everything.
+         If it failed, ask NetworkManager to rejoin a known network
+         so the Pi is never left stranded, and free up Button 4 to
+         be pressed again.
+    Every step is logged, and the whole thing is wrapped so an
+    unexpected error is logged instead of silently killing the thread.
     """
-    time.sleep(4)  # give the phone's browser time to actually render the success page first
-
     global _setup_mode_active
+    try:
+        time.sleep(4)  # give the phone's browser time to actually render the success page first
 
-    # Remove the hotspot profile entirely before joining the real
-    # network -- it's a one-shot, never something to keep around.
-    _run(["nmcli", "connection", "delete", HOTSPOT_CONNECTION_NAME])
+        try:
+            _update_location_in_settings_yaml(location_name, latitude, longitude)
+        except Exception:
+            _log("Could not save location:\n" + traceback.format_exc())
 
-    print(f"[wifi_setup] Connecting to '{ssid}'...")
-    result = _run(["nmcli", "device", "wifi", "connect", ssid, "password", password])
-    if result.returncode != 0:
-        # Can't reach the phone anymore to report this failure (the
-        # hotspot may already be gone) -- logged for later diagnosis
-        # over SSH instead. Reset the flag so Button 4 works again
-        # for a retry instead of staying blocked until an app restart.
-        print(f"[wifi_setup] Could not connect to '{ssid}': {result.stderr}")
+        _log("Removing the setup hotspot...")
+        _run(["nmcli", "connection", "delete", HOTSPOT_CONNECTION_NAME])
+        time.sleep(5)  # let the Wi-Fi radio settle back into normal (client) mode
+
+        connected = False
+        for attempt in range(1, CONNECT_ATTEMPTS + 1):
+            _log(f"Connecting to '{ssid}' (attempt {attempt} of {CONNECT_ATTEMPTS})...")
+            _run(["nmcli", "device", "wifi", "rescan"], timeout=20)  # may be refused if scanned very recently -- fine
+            time.sleep(4)  # scan results take a few seconds to arrive
+            result = _run(["nmcli", "device", "wifi", "connect", ssid, "password", password], timeout=60)
+            if result.returncode == 0:
+                connected = True
+                break
+            _log(f"Attempt {attempt} failed: {(result.stderr or result.stdout).strip()}")
+            time.sleep(3)
+
+        if not connected:
+            _log("Could not join the entered network. Asking NetworkManager to rejoin a known one instead.")
+            _run(["nmcli", "device", "connect", "wlan0"], timeout=60)
+            _setup_mode_active = False
+            return
+
+        _log("Connected. Rebooting to apply everything cleanly...")
+        _run(["reboot"])
+    except Exception:
+        _log("Unexpected error:\n" + traceback.format_exc())
         _setup_mode_active = False
-        return
-
-    _update_location_in_settings_yaml(location_name, latitude, longitude)
-
-    print("[wifi_setup] Rebooting to apply everything cleanly...")
-    _run(["reboot"])
 
 
 # =============================================================================
@@ -291,7 +360,7 @@ def enter_wifi_setup_mode() -> None:
     """
     global _setup_mode_active, _flask_started
     if _setup_mode_active:
-        print("[wifi_setup] Already in setup mode -- ignoring repeated button press.")
+        _log("Already in setup mode -- ignoring repeated button press.")
         return
 
     if not _start_hotspot():

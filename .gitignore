@@ -10,3 +10,5 @@ env/
 Thumbs.db
 .DS_Store
 *.log
+data/wifi_setup.log
+data/rtc_state.json
