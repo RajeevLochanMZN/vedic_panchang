@@ -88,6 +88,7 @@ SETTINGS_YAML_PATH = os.path.join(
 )
 
 _setup_mode_active = False  # guards against double-entry if Button 4 is pressed twice
+_flask_started = False      # Flask's server thread only ever needs starting once per app run
 
 
 def _run(cmd: list) -> subprocess.CompletedProcess:
@@ -101,6 +102,10 @@ def _run(cmd: list) -> subprocess.CompletedProcess:
 
 def _start_hotspot() -> bool:
     """Switch the Pi's Wi-Fi into AP/hotspot mode, broadcasting HOTSPOT_SSID. Returns True on success."""
+    # Clear out any leftover profile from a previous run first (errors
+    # ignored -- "profile doesn't exist" is the normal, fine case).
+    _run(["nmcli", "connection", "delete", HOTSPOT_CONNECTION_NAME])
+
     result = _run([
         "nmcli", "device", "wifi", "hotspot",
         "ifname", "wlan0",
@@ -111,6 +116,15 @@ def _start_hotspot() -> bool:
     if result.returncode != 0:
         print(f"[wifi_setup] Could not start hotspot: {result.stderr}")
         return False
+
+    # CRITICAL SAFETY: nmcli's hotspot command saves a persistent
+    # profile that can autoconnect on the NEXT BOOT -- which would trap
+    # the Pi in hotspot mode forever instead of rejoining home Wi-Fi.
+    # (Found the hard way: the hotspot switch itself worked during the
+    # first real test, but nothing stopped it from coming back after a
+    # reboot.) Hotspot mode must ONLY ever be entered via Button 4.
+    _run(["nmcli", "connection", "modify", HOTSPOT_CONNECTION_NAME, "connection.autoconnect", "no"])
+
     print(f"[wifi_setup] Hotspot '{HOTSPOT_SSID}' active (password: {HOTSPOT_PASSWORD}). "
           f"Connect a phone to it, then visit {SETUP_PAGE_URL}")
     return True
@@ -141,13 +155,21 @@ def _finish_setup_and_reboot(ssid: str, password: str, location_name: str,
     """
     time.sleep(4)  # give the phone's browser time to actually render the success page first
 
+    global _setup_mode_active
+
+    # Remove the hotspot profile entirely before joining the real
+    # network -- it's a one-shot, never something to keep around.
+    _run(["nmcli", "connection", "delete", HOTSPOT_CONNECTION_NAME])
+
     print(f"[wifi_setup] Connecting to '{ssid}'...")
     result = _run(["nmcli", "device", "wifi", "connect", ssid, "password", password])
     if result.returncode != 0:
         # Can't reach the phone anymore to report this failure (the
         # hotspot may already be gone) -- logged for later diagnosis
-        # over SSH instead.
+        # over SSH instead. Reset the flag so Button 4 works again
+        # for a retry instead of staying blocked until an app restart.
         print(f"[wifi_setup] Could not connect to '{ssid}': {result.stderr}")
+        _setup_mode_active = False
         return
 
     _update_location_in_settings_yaml(location_name, latitude, longitude)
@@ -243,7 +265,7 @@ def enter_wifi_setup_mode() -> None:
     (Flask's app.run() blocks forever, so it can't run on the main
     Qt thread without freezing the whole UI).
     """
-    global _setup_mode_active
+    global _setup_mode_active, _flask_started
     if _setup_mode_active:
         print("[wifi_setup] Already in setup mode -- ignoring repeated button press.")
         return
@@ -252,10 +274,17 @@ def enter_wifi_setup_mode() -> None:
         return  # error already logged in _start_hotspot()
 
     _setup_mode_active = True
-    threading.Thread(
-        target=lambda: _flask_app.run(host="0.0.0.0", port=5000, debug=False),
-        daemon=True,
-    ).start()
+
+    # Flask only ever needs starting ONCE per app run -- if setup mode
+    # is re-entered after a failed attempt, the server from the first
+    # time is still running, and starting a second one would fail
+    # trying to bind port 5000 again.
+    if not _flask_started:
+        _flask_started = True
+        threading.Thread(
+            target=lambda: _flask_app.run(host="0.0.0.0", port=5000, debug=False),
+            daemon=True,
+        ).start()
 
 
 # =============================================================================
