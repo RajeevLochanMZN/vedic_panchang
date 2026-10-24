@@ -58,7 +58,9 @@ does.
 
 import json
 import os
+import shutil
 import subprocess
+import tempfile
 from datetime import datetime, timedelta
 
 import smbus  # from the python3-smbus apt package (already installed)
@@ -82,6 +84,13 @@ REG_YEAR = 0x06         # 00-99, always interpreted as 2000-2099 for this projec
 # this often at most -- see the module docstring for why monthly is
 # plenty, given the DS3231's stock accuracy.
 RTC_RESYNC_INTERVAL_DAYS = 30
+
+# A DS3231 whose backup battery has died (or that was never set) comes
+# up reading 2000-01-01. Blindly applying that to the system clock at
+# boot would drag a perfectly good clock back 26 years, so any RTC
+# reading before this year is treated as "the RTC doesn't know the
+# time" and ignored.
+_MIN_SANE_YEAR = 2025
 
 # Small local file tracking when we last WROTE to the RTC chip (the
 # RTC itself has no memory of this -- it only stores the current
@@ -165,6 +174,10 @@ def sync_system_clock_from_rtc() -> bool:
         print(f"[rtc] Could not read RTC chip: {e}")
         return False
 
+    if rtc_time.year < _MIN_SANE_YEAR:
+        print(f"[rtc] RTC reads {rtc_time} -- looks unset or its battery has died; leaving the system clock alone.")
+        return False
+
     formatted = rtc_time.strftime("%Y-%m-%d %H:%M:%S")
     try:
         # Needs the passwordless-sudo rule described in the module
@@ -212,11 +225,46 @@ def _load_last_rtc_sync() -> datetime | None:
         return None  # file missing, corrupt, or never written -- treat as "never synced"
 
 
+def _atomic_write_text(path: str, text: str) -> None:
+    """
+    Write a file so that a power cut at ANY instant leaves either the
+    complete old file or the complete new one -- never a half-written
+    one. Writes to a temporary file in the same folder, forces it to
+    disk (fsync), then swaps it into place with os.replace(), which is
+    atomic on the same filesystem. (Writing the real file in place, as
+    an earlier version did, can leave a truncated/empty file if power
+    is lost mid-write.)
+    """
+    directory = os.path.dirname(os.path.abspath(path))
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".tmp-", suffix=".part")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.path.exists(path):
+            shutil.copymode(path, tmp_path)  # keep the original file's permissions
+        os.replace(tmp_path, path)
+        try:  # also flush the folder entry, so the rename itself survives a power cut
+            dir_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def _save_last_rtc_sync(when: datetime) -> None:
-    """Record the timestamp of a successful RTC write to the small local state file."""
+    """Record the timestamp of a successful RTC write to the small local state file (atomically -- see _atomic_write_text)."""
     os.makedirs(os.path.dirname(_STATE_FILE), exist_ok=True)
-    with open(_STATE_FILE, "w", encoding="utf-8") as f:
-        json.dump({"last_rtc_sync": when.isoformat()}, f)
+    _atomic_write_text(_STATE_FILE, json.dumps({"last_rtc_sync": when.isoformat()}))
 
 
 def maybe_sync_rtc_from_system() -> bool:

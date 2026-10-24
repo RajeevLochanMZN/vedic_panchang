@@ -1,0 +1,5 @@
+# Keep shell scripts and desktop entries on Unix (LF) line endings even when
+# edited or checked out on Windows -- CRLF breaks them on the Pi
+# ("bad interpreter" / "$'\r': command not found").
+*.sh text eol=lf
+*.desktop text eol=lf

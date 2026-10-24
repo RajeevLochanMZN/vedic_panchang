@@ -24,22 +24,38 @@ hardware buttons aren't connected). go_to_page() itself is UNCHANGED
 and still needed -- hardware/buttons.py's ButtonController will call
 it (via whatever callbacks main_window_hi.py wires up) exactly the
 same way the old on-screen buttons did.
+
+KIOSK BEHAVIOUR (added together with setup.sh / launch.sh):
+  - Starts in real FULLSCREEN (no title bar, covers the desktop taskbar).
+    For development set VEDICGHADI_WINDOWED=1 to get a normal window
+    instead, e.g.:  VEDICGHADI_WINDOWED=1 ./launch.sh
+  - Holding Panchang + Calendar together for 3 s shuts the Pi down
+    cleanly (hardware/buttons.py emits shutdown_requested; see
+    safe_shutdown() below). Wait for the screen to go blank AND the
+    green activity LED to stop flickering before removing power.
+  - At startup the system clock is set from the DS3231 RTC (unless NTP
+    has already corrected it), and once an hour maybe_sync_rtc_from_system()
+    checks whether the monthly RTC re-sync is due -- see hardware/rtc.py.
 """
 
 import os
+import subprocess
 import sys
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QStackedWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QLabel,
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "engine"))
 from ephemeris import init_ephemeris
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hardware"))
 from buttons import ButtonController
+from rtc import (
+    is_system_clock_ntp_synced, sync_system_clock_from_rtc, maybe_sync_rtc_from_system,
+)
 from wifi_setup import enter_wifi_setup_mode
 
 from page_home_hi import PageHomeHi
@@ -84,9 +100,8 @@ class MainWindowHi(QMainWindow):
         # banner replaced them. self.button_controller MUST be kept
         # as an instance attribute (not a local variable) -- gpiozero
         # stops listening for button presses if this object gets
-        # garbage-collected. Wi-Fi Setup (button 4) still uses the
-        # placeholder from hardware/buttons.py until that feature is
-        # built -- swap it for the real function once it exists.
+        # garbage-collected. Button 4 runs the real Wi-Fi Setup
+        # feature (hardware/wifi_setup.py).
         # NOTE: this only works when actually running on the Pi
         # itself (needs real GPIO hardware) -- it will fail if this
         # file is ever run on a plain PC.
@@ -104,6 +119,49 @@ class MainWindowHi(QMainWindow):
         self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
         self.button_controller.calendar_pressed.connect(lambda: self.go_to_page(3))
         self.button_controller.wifi_setup_pressed.connect(enter_wifi_setup_mode)
+        self.button_controller.shutdown_requested.connect(self.safe_shutdown)
+        self._shutting_down = False
+
+        # RTC upkeep (hardware/rtc.py). maybe_sync_rtc_from_system() is
+        # cheap and does nothing unless BOTH the system clock is
+        # NTP-synced AND ~30 days have passed since the last RTC
+        # write, so checking hourly is plenty. The first check waits a
+        # couple of minutes after startup so NTP has had time to
+        # finish -- before that it would just (correctly) do nothing.
+        self.rtc_timer = QTimer(self)
+        self.rtc_timer.timeout.connect(maybe_sync_rtc_from_system)
+        self.rtc_timer.start(60 * 60 * 1000)
+        QTimer.singleShot(2 * 60 * 1000, maybe_sync_rtc_from_system)
+
+    def safe_shutdown(self):
+        """
+        Triggered by holding Panchang + Calendar together for 3 s
+        (hardware/buttons.py). Shows a message on the banner so you can
+        see it registered, then runs a CLEAN shutdown -- yanking power
+        instead risks SD-card corruption. `sudo -n` means "never ask for
+        a password": it fails immediately if the passwordless-sudo rule
+        (written by setup.sh) is missing, rather than hanging forever.
+        """
+        if self._shutting_down:
+            return
+        self._shutting_down = True
+        print("[main_window] Shutdown combo held -- shutting the Pi down cleanly.")
+        self.banner_label.setText("बंद हो रहा है… कृपया प्रतीक्षा करें")
+        QApplication.processEvents()  # paint the message before the system starts closing things down
+        try:
+            result = subprocess.run(
+                ["sudo", "-n", "shutdown", "-h", "now"],
+                capture_output=True, text=True, timeout=15,
+            )
+            failed = result.returncode != 0
+            detail = result.stderr.strip()
+        except Exception as e:
+            failed, detail = True, str(e)
+        if failed:
+            # Don't leave a false "shutting down" message on screen.
+            print(f"[main_window] Shutdown command failed: {detail}")
+            self.banner_label.setText("वैदिक घड़ी")
+            self._shutting_down = False
 
     def go_to_page(self, page_number: int):
         """page_number is 1-3, matching Button 1-3. Identical to
@@ -138,6 +196,7 @@ class MainWindowHi(QMainWindow):
         layout.setContentsMargins(px(10), px(10), px(10), px(10))
 
         banner_label = QLabel("वैदिक घड़ी")
+        self.banner_label = banner_label  # kept so safe_shutdown() can show a message here
         banner_label.setAlignment(Qt.AlignCenter)
         banner_label.setMinimumHeight(px(60))
         # Saffron/gold (#f39c12) matches the accent color already used
@@ -213,13 +272,23 @@ class MainWindowHi(QMainWindow):
 
 
 def main():
+    # Give the Pi a correct clock BEFORE anything reads the time: set
+    # the system clock from the RTC -- but only if NTP hasn't already
+    # corrected it (a fresh network time beats the RTC's). Never
+    # raises; if it can't, the clock simply stays as it was.
+    if not is_system_clock_ntp_synced():
+        sync_system_clock_from_rtc()
+
     script_dir = os.path.dirname(os.path.abspath(__file__))
     ephe_path = os.path.join(script_dir, "..", "data", "ephe")
     init_ephemeris(ephe_path=ephe_path)
 
     app = QApplication(sys.argv)
     window = MainWindowHi()
-    window.show()
+    if os.environ.get("VEDICGHADI_WINDOWED"):
+        window.show()            # development: an ordinary window you can move and close
+    else:
+        window.showFullScreen()  # kiosk: no title bar, covers the whole screen incl. the taskbar
     sys.exit(app.exec_())
 
 

@@ -64,6 +64,20 @@ Usage (from main_window_hi.py, or main_window.py):
 method ends up being called, once that feature exists; until then,
 _placeholder_wifi_setup below is a reasonable stand-in.)
 
+SAFE SHUTDOWN COMBO: holding Panchang + Calendar down TOGETHER for
+SHUTDOWN_HOLD_SECONDS emits shutdown_requested. This exists because a
+kiosk with no keyboard attached still needs SOME way to trigger a
+clean `sudo shutdown -h now` before power is cut -- yanking power
+without one risks SD card corruption (a real concern already hit once
+this project, during earlier under-voltage troubleshooting). Detected
+with when_pressed/when_released tracking two plain booleans (safe to
+write from gpiozero's background thread -- these are simple Python
+attribute writes, not Qt GUI objects, which is the specific thing
+that's unsafe cross-thread, see the .emit() note above) plus a QTimer
+polling every 100ms. The QTimer itself always runs on the main Qt
+thread (it belongs to this QObject), so the actual hold-duration
+logic never touches gpiozero's thread at all.
+
 IMPORTANT: keep the ButtonController instance as an attribute on
 something long-lived (e.g. self.button_controller on the main
 window), never a local variable that goes out of scope -- both
@@ -72,7 +86,7 @@ once the ButtonController itself gets garbage-collected.
 """
 
 from gpiozero import Button
-from PyQt5.QtCore import QObject, pyqtSignal
+from PyQt5.QtCore import QObject, pyqtSignal, QTimer
 
 # GPIO pin numbers (BCM numbering, matching gpiozero's convention --
 # NOT the physical pin numbers on the 40-pin header). Chosen to
@@ -90,6 +104,12 @@ PIN_WIFI_SETUP = 23
 # two presses if someone ever wants that.
 BOUNCE_TIME = 0.1
 
+# Panchang + Calendar held down TOGETHER for this many seconds triggers
+# a safe shutdown -- a deliberately long hold, not a quick double-tap,
+# so it can't happen by accident during normal navigation.
+SHUTDOWN_HOLD_SECONDS = 3.0
+_COMBO_CHECK_INTERVAL_MS = 100  # how often the combo-hold timer checks in
+
 
 class ButtonController(QObject):
     """
@@ -105,6 +125,7 @@ class ButtonController(QObject):
     panchang_pressed = pyqtSignal()
     calendar_pressed = pyqtSignal()
     wifi_setup_pressed = pyqtSignal()
+    shutdown_requested = pyqtSignal()  # Panchang + Calendar held together for SHUTDOWN_HOLD_SECONDS
 
     def __init__(self):
         super().__init__()
@@ -119,9 +140,53 @@ class ButtonController(QObject):
         # docstring). Do NOT change these back to calling arbitrary
         # functions directly.
         self.home_button.when_pressed = self.home_pressed.emit
-        self.panchang_button.when_pressed = self.panchang_pressed.emit
-        self.calendar_button.when_pressed = self.calendar_pressed.emit
         self.wifi_setup_button.when_pressed = self.wifi_setup_pressed.emit
+
+        # Panchang/Calendar do double duty: their normal single-press
+        # signal, PLUS held-state tracking for the shutdown combo (see
+        # module docstring's "SAFE SHUTDOWN COMBO" note).
+        self._panchang_held = False
+        self._calendar_held = False
+        self._combo_hold_elapsed = 0.0
+        self._shutdown_already_fired = False  # guards against firing repeatedly while still held
+
+        self.panchang_button.when_pressed = self._on_panchang_pressed
+        self.panchang_button.when_released = self._on_panchang_released
+        self.calendar_button.when_pressed = self._on_calendar_pressed
+        self.calendar_button.when_released = self._on_calendar_released
+
+        self._combo_timer = QTimer(self)
+        self._combo_timer.setInterval(_COMBO_CHECK_INTERVAL_MS)
+        self._combo_timer.timeout.connect(self._check_shutdown_combo)
+        self._combo_timer.start()
+
+    def _on_panchang_pressed(self):
+        self._panchang_held = True
+        self.panchang_pressed.emit()
+
+    def _on_panchang_released(self):
+        self._panchang_held = False
+        self._combo_hold_elapsed = 0.0
+        self._shutdown_already_fired = False
+
+    def _on_calendar_pressed(self):
+        self._calendar_held = True
+        self.calendar_pressed.emit()
+
+    def _on_calendar_released(self):
+        self._calendar_held = False
+        self._combo_hold_elapsed = 0.0
+        self._shutdown_already_fired = False
+
+    def _check_shutdown_combo(self):
+        """Runs every _COMBO_CHECK_INTERVAL_MS on the main Qt thread (this is a QTimer, not a gpiozero callback)."""
+        if self._panchang_held and self._calendar_held:
+            self._combo_hold_elapsed += _COMBO_CHECK_INTERVAL_MS / 1000.0
+            if self._combo_hold_elapsed >= SHUTDOWN_HOLD_SECONDS and not self._shutdown_already_fired:
+                self._shutdown_already_fired = True
+                self.shutdown_requested.emit()
+        else:
+            self._combo_hold_elapsed = 0.0
 
 
 def _placeholder_wifi_setup():

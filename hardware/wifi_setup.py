@@ -93,7 +93,9 @@ it already is.
 
 import os
 import re
+import shutil
 import subprocess
+import tempfile
 import threading
 import time
 import traceback
@@ -258,6 +260,41 @@ def _start_hotspot() -> bool:
     return True
 
 
+def _atomic_write_text(path: str, text: str) -> None:
+    """
+    Write a file so that a power cut at ANY instant leaves either the
+    complete old file or the complete new one -- never a half-written
+    one (a truncated settings.yaml would stop the whole app from
+    starting). Writes to a temporary file in the same folder, forces it
+    to disk (fsync), then swaps it into place with os.replace(), which
+    is atomic on the same filesystem. Same helper as in hardware/rtc.py.
+    """
+    directory = os.path.dirname(os.path.abspath(path))
+    fd, tmp_path = tempfile.mkstemp(dir=directory, prefix=".tmp-", suffix=".part")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.path.exists(path):
+            shutil.copymode(path, tmp_path)  # keep the original file's permissions
+        os.replace(tmp_path, path)
+        try:  # also flush the folder entry, so the rename itself survives a power cut
+            dir_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(dir_fd)
+            finally:
+                os.close(dir_fd)
+        except OSError:
+            pass
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def _update_location_in_settings_yaml(name: str, latitude: float, longitude: float) -> None:
     """Targeted find-and-replace of just the location block's 3 fields -- see module docstring for why."""
     with open(SETTINGS_YAML_PATH, "r", encoding="utf-8") as f:
@@ -267,8 +304,7 @@ def _update_location_in_settings_yaml(name: str, latitude: float, longitude: flo
     content = re.sub(r'(latitude:\s*)[-\d.]+', f'\\g<1>{latitude}', content, count=1)
     content = re.sub(r'(longitude:\s*)[-\d.]+', f'\\g<1>{longitude}', content, count=1)
 
-    with open(SETTINGS_YAML_PATH, "w", encoding="utf-8") as f:
-        f.write(content)
+    _atomic_write_text(SETTINGS_YAML_PATH, content)
 
     _log(f"settings.yaml location updated: {name} ({latitude}, {longitude})")
 
