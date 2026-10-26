@@ -25,19 +25,23 @@
 #      visudo before it is installed -- and retires the two hand-made files
 #      from earlier testing.
 #   5. Cuts SD-card writes (logs kept in RAM, swap file off).
-#   6. Makes the clock start silently: a per-user ~/.config/labwc/autostart
-#      runs ONLY launch.sh. labwc uses the first autostart file it finds, so
-#      this replaces the system one -- the one that starts the wallpaper and
-#      the taskbar -- and the normal desktop never flashes up before the clock.
-#      (With --keep-desktop the clock is started by an XDG autostart entry on
-#      top of the normal desktop instead.)
+#   6. Makes the clock start silently. On Raspberry Pi OS a per-user
+#      ~/.config/labwc/autostart runs IN ADDITION to the system autostart
+#      (/etc/xdg/labwc/autostart), and the system one is what starts the
+#      desktop wallpaper and the taskbar. So the clock is started from the
+#      per-user file, and the two desktop lines in the system file are
+#      commented out (each marked "#VEDICGHADI# ", so they can be put back
+#      exactly). The screen stays black until the clock is up. With
+#      --keep-desktop those lines are put back and the clock is started by
+#      an XDG autostart entry on top of the normal desktop instead.
 #
 # What it deliberately does NOT do
 #   - Switch the desktop to X11. The app already runs correctly on the Pi's
 #     current desktop, so that is left alone.
-#   - Edit the system's own desktop files. The silent start uses a per-user
-#     file, which labwc reads INSTEAD of the system one; delete it and reboot
-#     and everything is back to normal.
+#   - Touch any other system file in /etc/xdg. The ONLY one it edits is
+#     /etc/xdg/labwc/autostart (two lines commented out, original saved as
+#     autostart.bak-vedicghadi). An OS upgrade can overwrite that file and
+#     bring the desktop back -- just run this script again with --skip-install.
 #   - Make the SD card read-only (overlay filesystem). That is a separate,
 #     later step -- see the project notes.
 #
@@ -52,8 +56,11 @@ SUDO="${SUDO-sudo}"      # tests set SUDO= (empty) to run without privileges
 
 KEEP_DESKTOP="${KEEP_DESKTOP:-0}"    # 1 = start the clock on top of the normal desktop
 SKIP_INSTALL="${SKIP_INSTALL:-0}"    # 1 = skip the apt/pip steps
-# launch.sh looks for this exact text to know the silent-kiosk autostart is in use.
 AUTOSTART_MARKER="Written by VedicGhadi setup.sh"
+# The system autostart file, and the prefix put on the lines that start the
+# desktop when they are switched off. launch.sh looks for the same prefix.
+SYSTEM_LABWC_AUTOSTART="${SYSTEM_LABWC_AUTOSTART:-/etc/xdg/labwc/autostart}"
+DISABLED_MARK="#VEDICGHADI# "
 
 WARNINGS=0
 
@@ -240,7 +247,35 @@ reduce_sd_writes() {
     fi
 }
 
-# Silent start: a per-user labwc autostart that runs ONLY the clock.
+# Switch off the desktop wallpaper (pcmanfm) and taskbar (wf-panel-pi) by
+# commenting out their lines in the system autostart. Each commented line is
+# prefixed with DISABLED_MARK so show_desktop() can put back exactly those.
+hide_desktop() {
+    local f="$SYSTEM_LABWC_AUTOSTART"
+    if [ ! -f "$f" ]; then
+        warn "$f not found -- cannot hide the desktop (is this the labwc desktop?)."
+        return 0
+    fi
+    if grep -qE '^[[:space:]]*[^#[:space:]].*(pcmanfm|wf-panel-pi)' "$f"; then
+        backup_once "$f"
+        $SUDO sed -i -E "/^[[:space:]]*[^#[:space:]].*(pcmanfm|wf-panel-pi)/ s/^/$DISABLED_MARK/" "$f"
+        info "Desktop wallpaper and taskbar switched off (original saved as $f.bak-vedicghadi)"
+    elif grep -q "^$DISABLED_MARK" "$f"; then
+        info "Desktop wallpaper and taskbar are already switched off"
+    else
+        warn "No pcmanfm / wf-panel-pi lines found in $f -- nothing to switch off. If the desktop still shows, send me that file."
+    fi
+}
+
+show_desktop() {
+    local f="$SYSTEM_LABWC_AUTOSTART"
+    if [ -f "$f" ] && grep -q "^$DISABLED_MARK" "$f"; then
+        $SUDO sed -i "s/^$DISABLED_MARK//" "$f"
+        info "Desktop wallpaper and taskbar switched back on"
+    fi
+}
+
+# Silent start: a per-user labwc autostart that runs the clock.
 write_silent_autostart() {
     local target="$KIOSK_HOME/.config/labwc/autostart"
     mkdir -p "$KIOSK_HOME/.config/labwc"
@@ -250,11 +285,11 @@ write_silent_autostart() {
     fi
     cat > "$target" <<EOF
 # $AUTOSTART_MARKER
-# labwc runs ONLY this file at login, instead of /etc/xdg/labwc/autostart
-# (which starts the desktop wallpaper and the taskbar). So the normal desktop
-# never appears before the clock does: the screen stays black until it is up.
-# To get the normal desktop back: delete this file and reboot, or run
-#       bash setup.sh --keep-desktop
+# Runs at login IN ADDITION to /etc/xdg/labwc/autostart. setup.sh has
+# commented out that file's wallpaper and taskbar lines, so only the clock
+# appears: the screen stays black until it is up.
+# To get the normal desktop back, run:
+#       bash setup.sh --skip-install --keep-desktop
 KIOSK_START_DELAY=0 $PROJECT_DIR/launch.sh &
 EOF
     info "Silent start written: $target"
@@ -302,10 +337,12 @@ install_kiosk_launcher() {
     # starts twice and never needs the lock to sort it out.
     if [ "$KEEP_DESKTOP" = "1" ]; then
         remove_silent_autostart
+        show_desktop
         write_xdg_autostart
     else
         rm -f "$KIOSK_HOME/.config/autostart/vedicghadi.desktop"
         write_silent_autostart
+        hide_desktop
     fi
 }
 
@@ -333,9 +370,12 @@ Handy commands:
         sudo cp $CMDLINE_TXT.bak-vedicghadi $CMDLINE_TXT
   Get the normal desktop back (e.g. to open a terminal on the Pi itself):
         bash setup.sh --skip-install --keep-desktop   then reboot
+     (or, by hand:  sudo sed -i 's/^#VEDICGHADI# //' $SYSTEM_LABWC_AUTOSTART )
   If the screen stays black and you have no way in: plug in a keyboard and
   press Ctrl+Alt+F2 for a text login (usually works), or SSH in, then run the
   command above.
+  After an OS upgrade the desktop may come back (the upgrade can overwrite
+  $SYSTEM_LABWC_AUTOSTART). Just run:  bash setup.sh --skip-install
 EOF
 }
 

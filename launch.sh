@@ -17,10 +17,10 @@ KIOSK_LOCK="${KIOSK_LOCK:-/dev/shm/vedicghadi.lock}"
 START_DELAY="${KIOSK_START_DELAY:-2}"                  # let the desktop finish starting up
 RESTART_DELAY="${KIOSK_RESTART_DELAY:-3}"
 
-# Used by restore_desktop() below.
-LABWC_USER_AUTOSTART="${LABWC_USER_AUTOSTART:-$HOME/.config/labwc/autostart}"
+# Used by restore_desktop() below. setup.sh switches the desktop off by
+# commenting out its lines in the system autostart, each with this prefix.
 SYSTEM_AUTOSTART="${SYSTEM_AUTOSTART:-/etc/xdg/labwc/autostart}"
-AUTOSTART_MARKER="Written by VedicGhadi setup.sh"   # same text setup.sh writes
+DISABLED_MARK="#VEDICGHADI# "   # same text setup.sh writes
 
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 
@@ -36,18 +36,17 @@ export DISPLAY="${DISPLAY:-:0}"
 sleep "$START_DELAY"
 
 # In the silent-kiosk start (see setup.sh) the normal desktop -- wallpaper and
-# taskbar -- is deliberately NOT running, so if the clock quits there would be
-# nothing but a black screen. This brings the desktop back in that case, by
-# running the same system script that normally starts it. It does nothing if
-# the silent start isn't in use, or if a desktop is already running (so it can
-# never start a second one on top of yours).
+# taskbar -- is deliberately switched off, so if the clock quits there would be
+# nothing but a black screen. This starts those two programs again, by running
+# exactly the lines setup.sh commented out (marker removed). It does nothing if
+# the desktop was never switched off, or if a taskbar is already running (so it
+# can never start a second desktop on top of yours).
 restore_desktop() {
-    grep -q "$AUTOSTART_MARKER" "$LABWC_USER_AUTOSTART" 2>/dev/null || return 0
+    grep -q "^$DISABLED_MARK" "$SYSTEM_AUTOSTART" 2>/dev/null || return 0
     pgrep -x wf-panel-pi >/dev/null 2>&1 && return 0
-    [ -r "$SYSTEM_AUTOSTART" ] || return 0
     echo "$(date '+%F %T') clock is not running -- bringing back the normal desktop" >> "$KIOSK_LOG"
-    # 9>&- : do not pass our lock to the desktop programs
-    setsid sh "$SYSTEM_AUTOSTART" 9>&- >/dev/null 2>&1 &
+    # 9>&- : do not pass our lock on to the desktop programs
+    setsid sh -c "sed -n 's/^$DISABLED_MARK//p' '$SYSTEM_AUTOSTART' | sh" 9>&- >/dev/null 2>&1 &
 }
 
 # Keep the kiosk alive: if the app crashes, start it again -- but give up
