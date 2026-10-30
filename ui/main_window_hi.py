@@ -1,6 +1,17 @@
 """
 ui/main_window_hi.py
 
+PAGES AND BUTTONS (current):
+  button 1  Home      = the dial page (ui/page_vedic_dial_hi.py)
+  button 2  Calendar  = ui/page_calendar_hi.py
+  button 3  Setup     = Wi-Fi + location setup (hardware/wifi_setup.py)
+  The Panchang page and the old Home page are no longer used (their files stay in the
+  project, just not imported).  Physical wiring is UNCHANGED: buttons 1-4 are still
+  GPIO17 / 27 / 22 / 23, and the shutdown combo (hold the 2nd and 3rd button for 3 s,
+  i.e. Calendar + Setup) works exactly as before.  The 4th button now does nothing.
+  After idle_return_seconds (settings.yaml, default 300) on the Calendar page with no
+  button press, the clock goes back to the dial page.
+
 Hindi/Devanagari twin of main_window.py. SEPARATE FILE --
 main_window.py is not modified here; imports the three Hindi pages
 (page_home_hi.py, page_panchang_hi.py, page_calendar_hi.py) instead
@@ -50,6 +61,7 @@ from PyQt5.QtCore import Qt, QTimer
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "engine"))
 from ephemeris import init_ephemeris
+from config_loader import load_settings
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "hardware"))
 from buttons import ButtonController
@@ -58,8 +70,7 @@ from rtc import (
 )
 from wifi_setup import enter_wifi_setup_mode
 
-from page_home_hi import PageHomeHi
-from page_panchang_hi import PagePanchangHi
+from page_vedic_dial_hi import PageVedicDialHi
 from page_calendar_hi import PageCalendarHi
 from scaling import px
 from translations_hi import get_devanagari_font_family
@@ -77,11 +88,10 @@ class MainWindowHi(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
 
-        self.page1 = PageHomeHi()
-        self.page2 = PagePanchangHi()
-        self.page3 = PageCalendarHi()
+        self.page1 = PageVedicDialHi()    # button 1: Home (the dial page)
+        self.page2 = PageCalendarHi()     # button 2: Calendar
 
-        for page in (self.page1, self.page2, self.page3):
+        for page in (self.page1, self.page2):
             self.stacked_widget.addWidget(page)
         # Opens on Page 1 (Home), same as main_window.py.
 
@@ -90,7 +100,10 @@ class MainWindowHi(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
         main_layout.addWidget(self.stacked_widget)
-        main_layout.addWidget(self._build_banner_row())
+        self.banner_row = self._build_banner_row()
+        main_layout.addWidget(self.banner_row)
+        # the dial page has its own banner, so the plain banner row is hidden there
+        self.stacked_widget.currentChanged.connect(self._on_page_changed)
         central.setLayout(main_layout)
         self.setCentralWidget(central)
 
@@ -115,12 +128,30 @@ class MainWindowHi(QMainWindow):
         # connected this way are safely queued onto the main GUI
         # thread by Qt automatically instead.
         self.button_controller = ButtonController()
+        # Signal names come from hardware/buttons.py and still follow the OLD wiring
+        # names; what each physical button does now:
+        #   home_pressed      (GPIO17, button 1) -> Home (dial page)
+        #   panchang_pressed  (GPIO27, button 2) -> Calendar page
+        #   calendar_pressed  (GPIO22, button 3) -> Wi-Fi / location Setup
+        #   wifi_setup_pressed(GPIO23, button 4) -> unused
         self.button_controller.home_pressed.connect(lambda: self.go_to_page(1))
         self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
-        self.button_controller.calendar_pressed.connect(lambda: self.go_to_page(3))
-        self.button_controller.wifi_setup_pressed.connect(enter_wifi_setup_mode)
+        self.button_controller.calendar_pressed.connect(enter_wifi_setup_mode)
         self.button_controller.shutdown_requested.connect(self.safe_shutdown)
         self._shutting_down = False
+
+        # IDLE RETURN: on any page except Home, no button press for idle_return_seconds
+        # -> back to Home.  Every button press restarts the countdown.
+        self.idle_seconds = int(load_settings().get("idle_return_seconds", 300))
+        self.idle_timer = QTimer(self)
+        self.idle_timer.setSingleShot(True)
+        self.idle_timer.timeout.connect(lambda: self.go_to_page(1))
+        for signal in (self.button_controller.home_pressed,
+                       self.button_controller.panchang_pressed,
+                       self.button_controller.calendar_pressed,
+                       self.button_controller.wifi_setup_pressed):
+            signal.connect(self._restart_idle)
+        self._on_page_changed(self.stacked_widget.currentIndex())
 
         # RTC upkeep (hardware/rtc.py). maybe_sync_rtc_from_system() is
         # cheap and does nothing unless BOTH the system clock is
@@ -132,6 +163,18 @@ class MainWindowHi(QMainWindow):
         self.rtc_timer.timeout.connect(maybe_sync_rtc_from_system)
         self.rtc_timer.start(60 * 60 * 1000)
         QTimer.singleShot(2 * 60 * 1000, maybe_sync_rtc_from_system)
+
+    def _on_page_changed(self, index):
+        """Banner row on every page except the dial page (index 0); the idle countdown
+        runs only away from Home."""
+        self.banner_row.setVisible(index != 0)
+        self._restart_idle()
+
+    def _restart_idle(self):
+        if self.stacked_widget.currentIndex() != 0 and self.idle_seconds > 0:
+            self.idle_timer.start(self.idle_seconds * 1000)
+        else:
+            self.idle_timer.stop()
 
     def safe_shutdown(self):
         """
@@ -147,6 +190,7 @@ class MainWindowHi(QMainWindow):
         self._shutting_down = True
         print("[main_window] Shutdown combo held -- shutting the Pi down cleanly.")
         self.banner_label.setText("बंद हो रहा है… कृपया प्रतीक्षा करें")
+        self.page1.show_message("बंद हो रहा है… कृपया प्रतीक्षा करें")   # dial page banner
         QApplication.processEvents()  # paint the message before the system starts closing things down
         try:
             result = subprocess.run(
@@ -161,12 +205,12 @@ class MainWindowHi(QMainWindow):
             # Don't leave a false "shutting down" message on screen.
             print(f"[main_window] Shutdown command failed: {detail}")
             self.banner_label.setText("वैदिक घड़ी")
+            self.page1.show_message(None)
             self._shutting_down = False
 
     def go_to_page(self, page_number: int):
-        """page_number is 1-3, matching Button 1-3. Identical to
-        main_window.py -- this is what hardware/buttons.py will call
-        on the Pi regardless of which language build is running."""
+        """page_number is 1-2: 1 = Home (dial page), 2 = Calendar.  Called by the
+        button signals above."""
         self.stacked_widget.setCurrentIndex(page_number - 1)
 
     def _build_banner_row(self) -> QWidget:

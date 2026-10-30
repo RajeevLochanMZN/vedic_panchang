@@ -1,0 +1,187 @@
+# config/cities_hi.yaml -- the 176 places of the ESP32 clock's setup list (names + latitude/longitude
+# from CityList.h) with Hindi names, used by ui/city_names_hi.py to show the clock's city in Hindi.
+# EDITABLE: add a city by copying a line, no code change.
+#   en       English name (the state code of the ESP32 list is in `state`; typing "Agra, UP" also works)
+#   hi       Hindi name shown on the clock
+#   lat/lon  degrees North / East
+#   aliases  other English spellings people type (optional)
+# THE HINDI NAMES WERE WRITTEN BY CLAUDE, NOT TAKEN FROM THE ESP32 (those are bitmaps) -- PLEASE REVIEW.
+# Notes: Aurangabad is officially Chhatrapati Sambhajinagar now; change `hi` if you prefer that.
+cities:
+  - {en: Delhi, hi: दिल्ली, lat: 28.61, lon: 77.21, aliases: [Dilli]}
+  - {en: Agartala, hi: अगरतला, lat: 23.836, lon: 91.279, state: TR}
+  - {en: Agra, hi: आगरा, lat: 27.183, lon: 78.017, state: UP}
+  - {en: Ahmedabad, hi: अहमदाबाद, lat: 23.026, lon: 72.587, state: GJ}
+  - {en: Aizawl, hi: आइजोल, lat: 23.729, lon: 92.718, state: MZ}
+  - {en: Ajmer, hi: अजमेर, lat: 26.452, lon: 74.639, state: RJ}
+  - {en: Aligarh, hi: अलीगढ़, lat: 27.881, lon: 78.075, state: UP}
+  - {en: Alwar, hi: अलवर, lat: 27.562, lon: 76.625, state: RJ}
+  - {en: Amaravati, hi: अमरावती, lat: 16.514, lon: 80.516, state: AP, aliases: [Amravati AP]}
+  - {en: Ambala, hi: अंबाला, lat: 30.361, lon: 76.798, state: HR}
+  - {en: Amravati, hi: अमरावती, lat: 20.933, lon: 77.75, state: MH}
+  - {en: Amritsar, hi: अमृतसर, lat: 31.622, lon: 74.875, state: PB}
+  - {en: Aurangabad, hi: औरंगाबाद, lat: 19.878, lon: 75.342, state: MH, aliases: [Chhatrapati Sambhajinagar]}
+  - {en: Ayodhya, hi: अयोध्या, lat: 26.799, lon: 82.205, state: UP}
+  - {en: Badrinath, hi: बद्रीनाथ, lat: 30.74, lon: 79.49, state: UK}
+  - {en: Bareilly, hi: बरेली, lat: 28.367, lon: 79.432, state: UP}
+  - {en: Belagavi, hi: बेलगावी, lat: 15.852, lon: 74.504, state: KA, aliases: [Belgaum]}
+  - {en: Bengaluru, hi: बेंगलुरु, lat: 12.972, lon: 77.594, state: KA, aliases: [Bangalore]}
+  - {en: Bhagalpur, hi: भागलपुर, lat: 25.244, lon: 86.972, state: BR}
+  - {en: Bharatpur, hi: भरतपुर, lat: 27.217, lon: 77.49, state: RJ}
+  - {en: Bhavnagar, hi: भावनगर, lat: 21.763, lon: 72.153, state: GJ}
+  - {en: Bhilai, hi: भिलाई, lat: 21.209, lon: 81.428, state: CG}
+  - {en: Bhopal, hi: भोपाल, lat: 23.255, lon: 77.403, state: MP}
+  - {en: Bhubaneswar, hi: भुवनेश्वर, lat: 20.272, lon: 85.834, state: OD}
+  - {en: Bhuj, hi: भुज, lat: 23.254, lon: 69.669, state: GJ}
+  - {en: Bijnor, hi: बिजनौर, lat: 29.373, lon: 78.136, state: UP}
+  - {en: Bikaner, hi: बीकानेर, lat: 28.018, lon: 73.315, state: RJ}
+  - {en: Bilaspur, hi: बिलासपुर, lat: 22.08, lon: 82.155, state: CG}
+  - {en: Bodh Gaya, hi: बोधगया, lat: 24.7, lon: 84.99, state: BR, aliases: [Bodhgaya]}
+  - {en: Bokaro, hi: बोकारो, lat: 23.669, lon: 86.152, state: JH}
+  - {en: Burhanpur, hi: बुरहानपुर, lat: 21.309, lon: 76.23, state: MP}
+  - {en: Chandigarh, hi: चंडीगढ़, lat: 30.736, lon: 76.788}
+  - {en: Chennai, hi: चेन्नई, lat: 13.088, lon: 80.278, state: TN, aliases: [Madras]}
+  - {en: Chhindwara, hi: छिंदवाड़ा, lat: 22.057, lon: 78.94, state: MP}
+  - {en: Chitrakoot, hi: चित्रकूट, lat: 25.2, lon: 80.85, state: UP}
+  - {en: Chittorgarh, hi: चित्तौड़गढ़, lat: 24.89, lon: 74.624, state: RJ}
+  - {en: Coimbatore, hi: कोयंबटूर, lat: 11.006, lon: 76.966, state: TN}
+  - {en: Cuttack, hi: कटक, lat: 20.465, lon: 85.879, state: OD}
+  - {en: Darbhanga, hi: दरभंगा, lat: 26.152, lon: 85.897, state: BR}
+  - {en: Darjeeling, hi: दार्जिलिंग, lat: 27.033, lon: 88.267, state: WB}
+  - {en: Dehradun, hi: देहरादून, lat: 30.324, lon: 78.034, state: UK}
+  - {en: Deoghar, hi: देवघर, lat: 24.49, lon: 86.699, state: JH}
+  - {en: Dewas, hi: देवास, lat: 22.966, lon: 76.055, state: MP}
+  - {en: Dhanbad, hi: धनबाद, lat: 23.798, lon: 86.43, state: JH}
+  - {en: Dharamshala, hi: धर्मशाला, lat: 32.22, lon: 76.32, state: HP, aliases: [Dharamsala]}
+  - {en: Dibrugarh, hi: डिब्रूगढ़, lat: 27.48, lon: 94.908, state: AS, aliases: [Dibrugargh]}
+  - {en: Durgapur, hi: दुर्गापुर, lat: 23.516, lon: 87.308, state: WB}
+  - {en: Dwarka, hi: द्वारका, lat: 22.239, lon: 68.968, state: GJ}
+  - {en: Faridabad, hi: फरीदाबाद, lat: 28.411, lon: 77.313, state: HR}
+  - {en: Gandhinagar, hi: गांधीनगर, lat: 23.217, lon: 72.683, state: GJ}
+  - {en: Gangtok, hi: गंगटोक, lat: 27.326, lon: 88.612, state: SK}
+  - {en: Gaya, hi: गया, lat: 24.797, lon: 85.004, state: BR}
+  - {en: Ghaziabad, hi: गाजियाबाद, lat: 28.665, lon: 77.439, state: UP}
+  - {en: Gorakhpur, hi: गोरखपुर, lat: 26.766, lon: 83.369, state: UP}
+  - {en: Guntur, hi: गुंटूर, lat: 16.3, lon: 80.457, state: AP}
+  - {en: Gurugram, hi: गुरुग्राम, lat: 28.46, lon: 77.026, state: HR, aliases: [Gurgaon]}
+  - {en: Guruvayur, hi: गुरुवायूर, lat: 10.594, lon: 76.041, state: KL}
+  - {en: Guwahati, hi: गुवाहाटी, lat: 26.184, lon: 91.746, state: AS}
+  - {en: Gwalior, hi: ग्वालियर, lat: 26.23, lon: 78.173, state: MP}
+  - {en: Haldwani, hi: हल्द्वानी, lat: 29.223, lon: 79.529, state: UK}
+  - {en: Hampi, hi: हम्पी, lat: 15.34, lon: 76.46, state: KA, aliases: [Hampe]}
+  - {en: Hapur, hi: हापुड़, lat: 28.73, lon: 77.781, state: UP}
+  - {en: Haridwar, hi: हरिद्वार, lat: 29.948, lon: 78.16, state: UK, aliases: [Hardwar]}
+  - {en: Hisar, hi: हिसार, lat: 29.154, lon: 75.723, state: HR}
+  - {en: Howrah, hi: हावड़ा, lat: 22.577, lon: 88.319, state: WB, aliases: [Haora]}
+  - {en: Hubballi, hi: हुब्बल्ली, lat: 15.348, lon: 75.134, state: KA, aliases: [Hubli]}
+  - {en: Hyderabad, hi: हैदराबाद, lat: 17.384, lon: 78.456, state: TG}
+  - {en: Imphal, hi: इंफाल, lat: 24.808, lon: 93.944, state: MN}
+  - {en: Indore, hi: इंदौर, lat: 22.718, lon: 75.833, state: MP}
+  - {en: Itanagar, hi: ईटानगर, lat: 27.087, lon: 93.61, state: AR}
+  - {en: Jabalpur, hi: जबलपुर, lat: 23.167, lon: 79.95, state: MP}
+  - {en: Jaipur, hi: जयपुर, lat: 26.92, lon: 75.788, state: RJ}
+  - {en: Jaisalmer, hi: जैसलमेर, lat: 26.918, lon: 70.904, state: RJ}
+  - {en: Jalandhar, hi: जालंधर, lat: 31.326, lon: 75.579, state: PB}
+  - {en: Jammu, hi: जम्मू, lat: 32.735, lon: 74.862, state: JK}
+  - {en: Jamnagar, hi: जामनगर, lat: 22.473, lon: 70.067, state: GJ}
+  - {en: Jamshedpur, hi: जमशेदपुर, lat: 22.803, lon: 86.185, state: JH}
+  - {en: Jhansi, hi: झांसी, lat: 25.459, lon: 78.58, state: UP, aliases: [Jhanshi]}
+  - {en: Jodhpur, hi: जोधपुर, lat: 26.268, lon: 73.006, state: RJ}
+  - {en: Junagadh, hi: जूनागढ़, lat: 21.52, lon: 70.46, state: GJ}
+  - {en: Kalaburagi, hi: कलबुर्गी, lat: 17.336, lon: 76.838, state: KA, aliases: [Gulbarga]}
+  - {en: Kanchipuram, hi: कांचीपुरम, lat: 12.835, lon: 79.7, state: TN, aliases: [Kancheepuram]}
+  - {en: Kanpur, hi: कानपुर, lat: 26.465, lon: 80.35, state: UP}
+  - {en: Kanyakumari, hi: कन्याकुमारी, lat: 8.09, lon: 77.538, state: TN, aliases: [Cape Comorin]}
+  - {en: Karnal, hi: करनाल, lat: 29.692, lon: 76.984, state: HR}
+  - {en: Katra, hi: कटरा, lat: 32.99, lon: 74.93, state: JK}
+  - {en: Kedarnath, hi: केदारनाथ, lat: 30.73, lon: 79.07, state: UK}
+  - {en: Khandwa, hi: खंडवा, lat: 21.824, lon: 76.351, state: MP}
+  - {en: Kochi, hi: कोच्चि, lat: 9.94, lon: 76.26, state: KL, aliases: [Cochin]}
+  - {en: Kohima, hi: कोहिमा, lat: 25.675, lon: 94.111, state: NL}
+  - {en: Kolhapur, hi: कोल्हापुर, lat: 16.696, lon: 74.232, state: MH}
+  - {en: Kolkata, hi: कोलकाता, lat: 22.563, lon: 88.363, state: WB, aliases: [Calcutta]}
+  - {en: Konark, hi: कोणार्क, lat: 19.89, lon: 86.09, state: OD}
+  - {en: Kota, hi: कोटा, lat: 25.183, lon: 75.839, state: RJ}
+  - {en: Kozhikode, hi: कोझिकोड, lat: 11.248, lon: 75.78, state: KL, aliases: [Calicut]}
+  - {en: Kurnool, hi: कुरनूल, lat: 15.829, lon: 78.036, state: AP}
+  - {en: Kurukshetra, hi: कुरुक्षेत्र, lat: 29.97, lon: 76.88, state: HR}
+  - {en: Latur, hi: लातूर, lat: 18.397, lon: 76.568, state: MH}
+  - {en: Leh, hi: लेह, lat: 34.165, lon: 77.584, state: LA}
+  - {en: Lucknow, hi: लखनऊ, lat: 26.839, lon: 80.923, state: UP}
+  - {en: Ludhiana, hi: लुधियाना, lat: 30.912, lon: 75.854, state: PB}
+  - {en: Madurai, hi: मदुरै, lat: 9.919, lon: 78.12, state: TN}
+  - {en: Maheshwar, hi: महेश्वर, lat: 22.18, lon: 75.59, state: MP}
+  - {en: Manali, hi: मनाली, lat: 32.24, lon: 77.19, state: HP}
+  - {en: Mandsaur, hi: मंदसौर, lat: 24.072, lon: 75.07, state: MP}
+  - {en: Mangaluru, hi: मंगलुरु, lat: 12.917, lon: 74.856, state: KA, aliases: [Mangalore]}
+  - {en: Margao, hi: मडगांव, lat: 15.275, lon: 73.958, state: GA, aliases: [Madgaon]}
+  - {en: Mathura, hi: मथुरा, lat: 27.503, lon: 77.672, state: UP}
+  - {en: Meerut, hi: मेरठ, lat: 28.98, lon: 77.706, state: UP}
+  - {en: Moradabad, hi: मुरादाबाद, lat: 28.839, lon: 78.777, state: UP}
+  - {en: Mumbai, hi: मुंबई, lat: 19.073, lon: 72.883, state: MH, aliases: [Bombay]}
+  - {en: Muzaffarnagar, hi: मुजफ्फरनगर, lat: 29.471, lon: 77.703, state: UP, aliases: [Muzaffar Nagar, Muzzafarnagar, Muzafarnagar]}
+  - {en: Muzaffarpur, hi: मुजफ्फरपुर, lat: 26.123, lon: 85.391, state: BR}
+  - {en: Mysuru, hi: मैसूर, lat: 12.298, lon: 76.639, state: KA, aliases: [Mysore]}
+  - {en: Nagpur, hi: नागपुर, lat: 21.146, lon: 79.085, state: MH}
+  - {en: Nainital, hi: नैनीताल, lat: 29.397, lon: 79.447, state: UK}
+  - {en: Nanded, hi: नांदेड़, lat: 19.16, lon: 77.315, state: MH}
+  - {en: Nashik, hi: नासिक, lat: 19.997, lon: 73.791, state: MH, aliases: [Nasik]}
+  - {en: Nathdwara, hi: नाथद्वारा, lat: 24.938, lon: 73.824, state: RJ}
+  - {en: Navi Mumbai, hi: नवी मुंबई, lat: 19.03, lon: 73.03, state: MH, aliases: [Newi Mumbai]}
+  - {en: Neemuch, hi: नीमच, lat: 24.459, lon: 74.866, state: MP}
+  - {en: New Delhi, hi: नई दिल्ली, lat: 28.621, lon: 77.215}
+  - {en: Noida, hi: नोएडा, lat: 28.58, lon: 77.33, state: UP}
+  - {en: Omkareshwar, hi: ओंकारेश्वर, lat: 22.24, lon: 76.15, state: MP}
+  - {en: Panaji, hi: पणजी, lat: 15.496, lon: 73.826, state: GA, aliases: [Panjim]}
+  - {en: Pandharpur, hi: पंढरपुर, lat: 17.679, lon: 75.331, state: MH}
+  - {en: Panipat, hi: पानीपत, lat: 29.387, lon: 76.968, state: HR}
+  - {en: Patiala, hi: पटियाला, lat: 30.336, lon: 76.392, state: PB}
+  - {en: Patna, hi: पटना, lat: 25.594, lon: 85.136, state: BR}
+  - {en: Port Blair, hi: पोर्ट ब्लेयर, lat: 11.666, lon: 92.746, state: AN}
+  - {en: Prayagraj, hi: प्रयागराज, lat: 25.445, lon: 81.843, state: UP, aliases: [Allahabad]}
+  - {en: Puducherry, hi: पुदुचेरी, lat: 11.934, lon: 79.83, aliases: [Pondicherry]}
+  - {en: Pune, hi: पुणे, lat: 18.52, lon: 73.855, state: MH, aliases: [Poona]}
+  - {en: Puri, hi: पुरी, lat: 19.798, lon: 85.825, state: OD}
+  - {en: Pushkar, hi: पुष्कर, lat: 26.49, lon: 74.552, state: RJ}
+  - {en: Raipur, hi: रायपुर, lat: 21.233, lon: 81.633, state: CG}
+  - {en: Rajkot, hi: राजकोट, lat: 22.292, lon: 70.793, state: GJ}
+  - {en: Rameswaram, hi: रामेश्वरम, lat: 9.289, lon: 79.313, state: TN}
+  - {en: Ranchi, hi: रांची, lat: 23.343, lon: 85.309, state: JH}
+  - {en: Ratlam, hi: रतलाम, lat: 23.33, lon: 75.04, state: MP}
+  - {en: Rewa, hi: रीवा, lat: 24.533, lon: 81.292, state: MP}
+  - {en: Rishikesh, hi: ऋषिकेश, lat: 30.108, lon: 78.293, state: UK}
+  - {en: Rohtak, hi: रोहतक, lat: 28.894, lon: 76.589, state: HR}
+  - {en: Roorkee, hi: रुड़की, lat: 29.866, lon: 77.891, state: UK}
+  - {en: Rourkela, hi: राउरकेला, lat: 22.225, lon: 84.864, state: OD}
+  - {en: Sagar, hi: सागर, lat: 23.839, lon: 78.739, state: MP}
+  - {en: Saharanpur, hi: सहारनपुर, lat: 29.968, lon: 77.545, state: UP}
+  - {en: Salem, hi: सेलम, lat: 11.654, lon: 78.155, state: TN}
+  - {en: Satna, hi: सतना, lat: 24.577, lon: 80.827, state: MP}
+  - {en: Shillong, hi: शिलांग, lat: 25.569, lon: 91.883, state: ML}
+  - {en: Shimla, hi: शिमला, lat: 31.104, lon: 77.167, state: HP, aliases: [Simla]}
+  - {en: Shirdi, hi: शिरडी, lat: 19.77, lon: 74.48, state: MH}
+  - {en: Sikar, hi: सीकर, lat: 27.612, lon: 75.14, state: RJ}
+  - {en: Silchar, hi: सिलचर, lat: 24.827, lon: 92.798, state: AS}
+  - {en: Siliguri, hi: सिलीगुड़ी, lat: 26.71, lon: 88.429, state: WB}
+  - {en: Solapur, hi: सोलापुर, lat: 17.672, lon: 75.91, state: MH}
+  - {en: Somnath, hi: सोमनाथ, lat: 20.89, lon: 70.4, state: GJ}
+  - {en: Srinagar, hi: श्रीनगर, lat: 34.086, lon: 74.806, state: JK}
+  - {en: Surat, hi: सूरत, lat: 21.196, lon: 72.83, state: GJ}
+  - {en: Thane, hi: ठाणे, lat: 19.197, lon: 72.964, state: MH}
+  - {en: Thanjavur, hi: तंजावुर, lat: 10.785, lon: 79.139, state: TN, aliases: [Tanjore]}
+  - {en: Thiruvananthapuram, hi: तिरुवनंतपुरम, lat: 8.486, lon: 76.949, state: KL, aliases: [Trivandrum]}
+  - {en: Thrissur, hi: त्रिशूर, lat: 10.517, lon: 76.217, state: KL, aliases: [Trichur]}
+  - {en: Tiruchirappalli, hi: तिरुचिरापल्ली, lat: 10.816, lon: 78.697, state: TN, aliases: [Trichy, Tiruchi]}
+  - {en: Tirunelveli, hi: तिरुनेलवेली, lat: 8.727, lon: 77.684, state: TN}
+  - {en: Tirupati, hi: तिरुपति, lat: 13.636, lon: 79.42, state: AP}
+  - {en: Udaipur, hi: उदयपुर, lat: 24.586, lon: 73.713, state: RJ}
+  - {en: Udupi, hi: उडुपी, lat: 13.335, lon: 74.746, state: KA}
+  - {en: Ujjain, hi: उज्जैन, lat: 23.182, lon: 75.776, state: MP, aliases: [Ujain]}
+  - {en: Vadodara, hi: वडोदरा, lat: 22.299, lon: 73.208, state: GJ, aliases: [Baroda]}
+  - {en: Varanasi, hi: वाराणसी, lat: 25.317, lon: 83.01, state: UP, aliases: [Banaras, Benares, Kashi]}
+  - {en: Vellore, hi: वेल्लोर, lat: 12.918, lon: 79.133, state: TN}
+  - {en: Vidisha, hi: विदिशा, lat: 23.526, lon: 77.811, state: MP}
+  - {en: Vijayawada, hi: विजयवाड़ा, lat: 16.507, lon: 80.647, state: AP}
+  - {en: Visakhapatnam, hi: विशाखापत्तनम, lat: 17.68, lon: 83.202, state: AP, aliases: [Vizag, Vishakhapatnam]}
+  - {en: Vrindavan, hi: वृंदावन, lat: 27.581, lon: 77.697, state: UP}
+  - {en: Warangal, hi: वारंगल, lat: 18.0, lon: 79.583, state: TG}

@@ -81,7 +81,7 @@ festivals:
     name: Holika Dahan
     rule: tithi_at_sunrise
     lunar_month: 12
-    tithi: 14
+    tithi: 15
   - id: holi
     name: Holi
     rule: tithi_at_sunrise
