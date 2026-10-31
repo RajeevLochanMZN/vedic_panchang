@@ -1,0 +1,30 @@
+I put both edits into one script, pi_display_fix.sh, so you don’t 
+have to remember any commands. I tested it on a copy of your two files.
+
+The two commands, as raw text
+
+Boot without keyboard or mouse, adds a line to ~/.config/labwc/environment:
+   printf '\nWLR_LIBINPUT_NO_DEVICES=1\n' >> ~/.config/labwc/environment
+Monitor mode, a line in ~/.config/labwc/autostart, placed just before the 
+line that starts launch.sh:
+   wlr-randr --output HDMI-A-1 --mode 1440x900@59.901001Hz || wlr-randr --output HDMI-A-1 --mode 1440x900
+
+Where to keep them: keep the script in your git project, 
+in a new folder tools, at panchang-clock\tools\pi_display_fix.sh. Then run git add, git commit and git push as usual. Your repo then keeps the settings, and any new SD card gets them with the project.
+
+How to use it later, on a fresh Pi
+
+Install the OS, get the project with git, and run setup.sh as before.
+Run bash ~/VedicGhadi/tools/pi_display_fix.sh. Run it after setup.sh, 
+because setup.sh rewrites the autostart file.
+Run sudo reboot.
+
+Options
+
+--no-mode adds only the keyboard-free line. Use it on a 16:9 panel.
+--remove-mode takes the monitor-mode line out again.
+You can use a different screen with VEDICGHADI_OUTPUT= and VEDICGHADI_MODE= in front of the command. The first lines of the script show an example and how to list the real names.
+
+Safe to run twice. It never adds a line twice and keeps a backup of the autostart file as autostart.bak-mode. Your Pi already has both settings, so you don’t need to run it there now. I tested that running it on your current files changes nothing, and that adding the line again after removal works.
+
+One thing I can’t check: the script has to keep Unix line endings. Your handover says .gitattributes handles this for scripts, but check that it also covers files in tools. If the Pi says bad interpreter, that is the cause. I can fix it if you send me your .gitattributes.
