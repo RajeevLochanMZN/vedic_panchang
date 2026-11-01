@@ -328,9 +328,9 @@ def main():
     init_ephemeris(ephe_path=ephe_path)
 
     app = QApplication(sys.argv)
-    
+
     if sys.platform.startswith("linux"):
-    app.setOverrideCursor(Qt.BlankCursor)
+        app.setOverrideCursor(Qt.BlankCursor)
 
     window = MainWindowHi()
     if os.environ.get("VEDICGHADI_WINDOWED"):
