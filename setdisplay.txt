@@ -1,0 +1,38 @@
+For any new display, do these steps over SSH:
+
+1. Turn the display on and select its HDMI input first. Then boot the Pi.
+2.Look at what the Pi sees:
+   bash ~/VedicGhadi/tools/set_display.sh show
+It shows the current mode, how many modes the screen offers, whether 
+the screen sent display information (EDID), and which settings are in effect.
+
+3. Choose the command that matches:
+
+What show says					Command
+
+Normal: the screen names itself
+and the picture is the right shape		bash ~/VedicGhadi/tools/set_display.sh auto
+
+The screen lists the size you want,
+for example 1440x900 or 1920x1080		bash ~/VedicGhadi/tools/set_display.sh 1440x900
+
+The screen sends no information: 
+make and model say (null), 
+or EDID is 0 bytes, as with your Sony TV	bash ~/VedicGhadi/tools/set_display.sh force 1280x720
+
+4. Run sudo reboot. Then run show again to check.
+
+More about each command
+
+WxH: this checks that the screen really offers the size. 
+If it doesn’t, it says so, lists what is offered, 
+and suggests force.
+
+force: this writes the mode into /boot/firmware/cmdline.txt 
+and keeps a backup. It checks that the file stays one line.
+It asks for your sudo password if needed. Running it again 
+replaces the earlier forced mode instead of adding a second one.
+
+auto: this goes back to the screen’s own mode and removes 
+any forced part. It is also the undo for the other two.
+
