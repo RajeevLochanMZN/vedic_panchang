@@ -1,7 +1,11 @@
 """
 ui/main_window_hi.py
 
-PAGES AND BUTTONS (current):
+BUTTONS (default scheme "three"; settings.yaml button_scheme: three | four, see __init__):
+  button 1 = toggle Home <-> Calendar   button 2 = Setup   button 3 = Shutdown (press twice within 5 s)
+  Calendar returns to Home after idle_return_seconds.  Older "four" scheme described below:
+
+PAGES AND BUTTONS (scheme "four"):
   button 1  Home      = the dial page (ui/page_vedic_dial_hi.py)
   button 2  Calendar  = ui/page_calendar_hi.py
   button 3  Setup     = Wi-Fi + location setup (hardware/wifi_setup.py)
@@ -134,11 +138,30 @@ class MainWindowHi(QMainWindow):
         #   panchang_pressed  (GPIO27, button 2) -> Calendar page
         #   calendar_pressed  (GPIO22, button 3) -> Wi-Fi / location Setup
         #   wifi_setup_pressed(GPIO23, button 4) -> unused
-        self.button_controller.home_pressed.connect(lambda: self.go_to_page(1))
-        self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
-        self.button_controller.calendar_pressed.connect(enter_wifi_setup_mode)
+        # BUTTON SCHEME -- settings.yaml  button_scheme:
+        #   "three" (DEFAULT, both Pis): button 1 toggles Home <-> Calendar, button 2 = Setup,
+        #           button 3 = Shutdown (press twice within 5 s).  Button 4 is not used.
+        #   "four"  (the old scheme, only if ever wanted again): button 1 Home, button 2 Calendar,
+        #           button 3 Setup, button 4 unused; shutdown = hold buttons 2 + 3 for 3 s.
+        # The signal names come from hardware/buttons.py and still follow the OLD wiring names:
+        #   home_pressed (GPIO17, button 1)   panchang_pressed (GPIO27, button 2)
+        #   calendar_pressed (GPIO22, button 3)   wifi_setup_pressed (GPIO23, button 4)
+        self.button_scheme = str(load_settings().get("button_scheme", "three")).strip().lower()
+        if self.button_scheme == "three":
+            self.button_controller.home_pressed.connect(self.toggle_page)
+            self.button_controller.panchang_pressed.connect(enter_wifi_setup_mode)
+            self.button_controller.calendar_pressed.connect(self.shutdown_button_pressed)
+        else:
+            self.button_controller.home_pressed.connect(lambda: self.go_to_page(1))
+            self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
+            self.button_controller.calendar_pressed.connect(enter_wifi_setup_mode)
         self.button_controller.shutdown_requested.connect(self.safe_shutdown)
         self._shutting_down = False
+        # "three" scheme: the first press of the shutdown button only ARMS it for 5 seconds
+        self._shutdown_armed = False
+        self._disarm_timer = QTimer(self)
+        self._disarm_timer.setSingleShot(True)
+        self._disarm_timer.timeout.connect(self._disarm_shutdown)
 
         # IDLE RETURN: on any page except Home, no button press for idle_return_seconds
         # -> back to Home.  Every button press restarts the countdown.
@@ -175,6 +198,34 @@ class MainWindowHi(QMainWindow):
             self.idle_timer.start(self.idle_seconds * 1000)
         else:
             self.idle_timer.stop()
+
+    # ------------------------------------------------------------------
+    # THREE-BUTTON SCHEME (settings.yaml: button_scheme: three)
+    # ------------------------------------------------------------------
+    def toggle_page(self):
+        """Button 1: Home <-> Calendar.  The Calendar page returns to Home by itself
+        after idle_return_seconds with no button press."""
+        self.go_to_page(2 if self.stacked_widget.currentIndex() == 0 else 1)
+
+    def shutdown_button_pressed(self):
+        """Button 3: press once -> the banner asks to press again; press again within
+        5 seconds -> clean shutdown.  One accidental press does nothing."""
+        if self._shutdown_armed:
+            self._disarm_shutdown()
+            self.safe_shutdown()
+            return
+        self._shutdown_armed = True
+        self._disarm_timer.start(5000)
+        ask = "बंद करने के लिए फिर से दबाएँ"
+        self.banner_label.setText(ask)
+        self.page1.show_message(ask)
+
+    def _disarm_shutdown(self):
+        self._shutdown_armed = False
+        self._disarm_timer.stop()
+        if not self._shutting_down:
+            self.banner_label.setText("वैदिक घड़ी")
+            self.page1.show_message(None)
 
     def safe_shutdown(self):
         """
