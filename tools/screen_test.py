@@ -16,6 +16,13 @@ Look at the screen:
     circle round, square square   -> the screen is fine, the problem is in the clock page
     circle oval / square a box    -> the picture is stretched AFTER the program draws it
 Optional:  python3 tools/screen_test.py --save /tmp/t.png   writes what the program drew, and quits.
+
+IN-PROGRAM ROTATION (what the clock does with app_rotation.txt):
+    python3 tools/screen_test.py --rotate 90      the test picture is turned by the program itself
+    python3 tools/screen_test.py --rotate 270     (the desktop's own rotation must be "normal")
+  The arrow marked UP must point to the TOP of the screen as you look at it, the circle must be
+  round and the square square.  The rotation that does that is the one for app_rotation.txt:
+    bash tools/set_display.sh app-rotate 90   (or 270)
 """
 import sys
 from PyQt5.QtCore import Qt, QRectF, QPointF
@@ -64,12 +71,21 @@ class T(QWidget):
 
 
 if __name__ == "__main__":
+    import os
     app = QApplication(sys.argv)
-    win = T()
     size = app.primaryScreen().availableGeometry().size()
-    win.resize(size)
+    rot = int(sys.argv[sys.argv.index("--rotate") + 1]) if "--rotate" in sys.argv else 0
+    if rot:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui"))
+        from rotated_host import RotatedHost
+        content = T()
+        win = RotatedHost(content, size.width(), size.height(), rot)
+    else:
+        win = T()
+        win.resize(size)
     win.setWindowTitle("screen test")
     if "--save" in sys.argv:
+        win.resize(size)
         win.show()
         app.processEvents()
         win.grab().save(sys.argv[sys.argv.index("--save") + 1])
