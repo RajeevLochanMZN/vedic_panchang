@@ -10,10 +10,15 @@
 #   bash tools/set_display.sh rotate 90        turn the picture (Pi 2: the 7-inch panel used upright);
 #                                              90 | 180 | 270 | normal.  If it is upside down, use the
 #                                              other of 90 / 270.  The clock then picks its PORTRAIT page.
+#   bash tools/set_display.sh app-rotate 90    the PROGRAM turns its own picture (90 | 180 | 270 | normal).
+#                                              Use this on Pi 2 if "rotate" shows a stretched picture
+#                                              (the desktop stretches X11 programs on a rotated screen).
+#                                              The screen stays 800x480; the clock draws portrait itself.
 #   then:  sudo reboot
 #
 # How it works:
 #   "rotate" writes ~/.config/vedicghadi/screen_rotation.txt, also read by apply_display_mode.sh.
+#   "app-rotate" writes ~/.config/vedicghadi/app_rotation.txt, read by ui/main_window_hi.py.
 #   "auto" / "WxH" write ~/.config/vedicghadi/display_mode.txt, read by apply_display_mode.sh
 #          (hook in ~/.config/labwc/autostart, installed by tools/pi_display_fix.sh).
 #   "force" adds  video=<output>:WxH@60D  to /boot/firmware/cmdline.txt (needs sudo, keeps a backup
@@ -23,6 +28,7 @@
 set -e
 DISPLAY_FILE="${VEDICGHADI_DISPLAY_FILE:-$HOME/.config/vedicghadi/display_mode.txt}"
 ROTATION_FILE="${VEDICGHADI_ROTATION_FILE:-$HOME/.config/vedicghadi/screen_rotation.txt}"
+APP_ROTATION_FILE="${VEDICGHADI_APP_ROTATION_FILE:-$HOME/.config/vedicghadi/app_rotation.txt}"
 CMDLINE="${VEDICGHADI_CMDLINE:-/boot/firmware/cmdline.txt}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
@@ -57,7 +63,8 @@ case "$cmd" in
     for f in /sys/class/drm/*HDMI*/edid; do [ -e "$f" ] && echo "   $f: $(wc -c < "$f") bytes"; done
     echo "== settings in effect =="
     echo "   display_mode.txt : $( [ -f "$DISPLAY_FILE" ] && cat "$DISPLAY_FILE" || echo '(none = auto)')"
-    echo "   screen_rotation  : $( [ -f "$ROTATION_FILE" ] && cat "$ROTATION_FILE" || echo '(none = normal)')"
+    echo "   screen_rotation  : $( [ -f "$ROTATION_FILE" ] && cat "$ROTATION_FILE" || echo '(none = normal)')   (desktop turns the screen)"
+    echo "   app_rotation     : $( [ -f "$APP_ROTATION_FILE" ] && cat "$APP_ROTATION_FILE" || echo '(none = normal)')   (the clock turns its own picture)"
     echo "   kernel video=    : $(grep -oE 'video=HDMI-A-[0-9]+:[^ ]*' "$CMDLINE" 2>/dev/null || echo '(none)')"
     ;;
   auto)
@@ -92,9 +99,20 @@ case "$cmd" in
     echo "screen_rotation.txt: $want   (applied at every start, before the clock opens)"
     echo "done -- now run:  sudo reboot      (picture upside down? use the other one of 90 / 270)"
     ;;
+  app-rotate)
+    want="${2:-}"
+    case "$want" in
+      normal|0) want=normal ;;
+      90|180|270) ;;
+      *) echo "usage: set_display.sh app-rotate normal|90|180|270"; exit 1 ;;
+    esac
+    mkdir -p "$(dirname "$APP_ROTATION_FILE")"; echo "$want" > "$APP_ROTATION_FILE"
+    echo "app_rotation.txt: $want   (read when the clock starts; the screen itself stays as it is)"
+    echo "done -- restart the clock (or: sudo reboot).  Upside down? use the other one of 90 / 270."
+    ;;
   *)
     want="$cmd"
-    [[ "$want" =~ ^[0-9]+x[0-9]+$ ]] || { echo "usage: set_display.sh show | auto | WxH | force WxH | rotate normal|90|180|270"; exit 1; }
+    [[ "$want" =~ ^[0-9]+x[0-9]+$ ]] || { echo "usage: set_display.sh show | auto | WxH | force WxH | rotate N|90|180|270 | app-rotate N|90|180|270"; exit 1; }
     if ! printf '%s\n' "$LIST" | awk '/px/ {print $1}' | grep -qx "$want"; then
       echo "ERROR: this screen does not offer $want. Offered sizes:"
       printf '%s\n' "$LIST" | awk '/px/ {print "   " $1}' | sort -u

@@ -61,7 +61,7 @@ from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QStackedWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QLabel,
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QSize
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "engine"))
 from ephemeris import init_ephemeris
@@ -77,8 +77,30 @@ from wifi_setup import enter_wifi_setup_mode
 from page_vedic_dial_hi import PageVedicDialHi
 from page_vedic_dial_portrait_hi import PageVedicDialPortraitHi
 from page_calendar_hi import PageCalendarHi
+from rotated_host import RotatedHost, logical_size
 from scaling import px
 from translations_hi import get_devanagari_font_family
+
+
+def app_rotation():
+    """How much the PROGRAM turns its own picture: 0, 90, 180 or 270.
+    Used when the desktop's own rotation (wlr-randr) stretches the picture (Pi 2).
+    First valid answer wins:  environment variable VEDICGHADI_APP_ROTATION, then the file
+    ~/.config/vedicghadi/app_rotation.txt  (normal | 90 | 180 | 270; per device, outside git).
+    Set it with:  bash tools/set_display.sh app-rotate 90      (then sudo reboot)"""
+    def norm(value):
+        v = str(value or "").strip().lower()
+        return {"90": 90, "180": 180, "270": 270, "0": 0, "normal": 0}.get(v)
+    v = norm(os.environ.get("VEDICGHADI_APP_ROTATION"))
+    if v is not None:
+        return v
+    path = os.path.join(os.path.expanduser("~"), ".config", "vedicghadi", "app_rotation.txt")
+    try:
+        with open(path, encoding="utf-8") as f:
+            v = norm(f.readline())
+    except OSError:
+        v = None
+    return v or 0
 
 
 def choose_layout(screen_size):
@@ -127,16 +149,24 @@ class MainWindowHi(QMainWindow):
 
         self.font_family = get_devanagari_font_family()
 
-        screen_size = QApplication.instance().primaryScreen().availableGeometry().size()
-        self.resize(screen_size.width(), screen_size.height())
+        phys_size = QApplication.instance().primaryScreen().availableGeometry().size()
+        self.resize(phys_size.width(), phys_size.height())
+        # the program may turn its own picture (app_rotation); the pages are then laid out at the
+        # LOGICAL size, e.g. 480 x 800 on an 800 x 480 panel turned by 90
+        self.app_rot = app_rotation()
+        lw, lh = logical_size(phys_size.width(), phys_size.height(), self.app_rot)
+        screen_size = QSize(lw, lh)
 
         self.stacked_widget = QStackedWidget()
 
         # button 1: Home (the dial page): PORTRAIT or LANDSCAPE page, see choose_layout()
         layout, why = choose_layout(screen_size)
         portrait = (layout == "portrait")
-        print("[display] screen %d x %d -> %s dial page  (decided by: %s)" % (
-            screen_size.width(), screen_size.height(), layout.upper(), why), flush=True)
+        print("[display] screen %d x %d%s -> %s dial page  (decided by: %s)" % (
+            screen_size.width(), screen_size.height(),
+            (" (program turns the picture by %d, panel is %d x %d)" % (
+                self.app_rot, phys_size.width(), phys_size.height())) if self.app_rot else "",
+            layout.upper(), why), flush=True)
         if portrait:
             self.page1 = PageVedicDialPortraitHi()
         else:
@@ -157,7 +187,11 @@ class MainWindowHi(QMainWindow):
         # the dial page has its own banner, so the plain banner row is hidden there
         self.stacked_widget.currentChanged.connect(self._on_page_changed)
         central.setLayout(main_layout)
-        self.setCentralWidget(central)
+        if self.app_rot:
+            self.setCentralWidget(RotatedHost(central, phys_size.width(), phys_size.height(),
+                                              self.app_rot))
+        else:
+            self.setCentralWidget(central)
 
         # Wires the 4 physical hardware buttons to this window's own
         # go_to_page() -- the SAME method the old on-screen buttons
