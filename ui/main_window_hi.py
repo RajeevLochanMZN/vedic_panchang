@@ -59,7 +59,7 @@ import sys
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QStackedWidget, QVBoxLayout,
-    QHBoxLayout, QPushButton, QLabel,
+    QHBoxLayout, QPushButton, QLabel, QLayout, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, QTimer, QSize
 
@@ -187,11 +187,22 @@ class MainWindowHi(QMainWindow):
         # the dial page has its own banner, so the plain banner row is hidden there
         self.stacked_widget.currentChanged.connect(self._on_page_changed)
         central.setLayout(main_layout)
+        self._content = central
         if self.app_rot:
+            # inside the rotating view the content must take EXACTLY the logical size,
+            # whatever the minimum size of its pages is
+            main_layout.setSizeConstraint(QLayout.SetNoConstraint)
+            central.setMinimumSize(0, 0)
+            # a page with a large minimum size (the Calendar: 7 columns) would make the content
+            # wider than the screen and push the dial page off-centre, so the pages' own size
+            # wishes are ignored here: the content is always exactly the logical screen size
+            for w in (self.stacked_widget, self.page1, self.page2):
+                w.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
             self.setCentralWidget(RotatedHost(central, phys_size.width(), phys_size.height(),
                                               self.app_rot))
         else:
             self.setCentralWidget(central)
+        QTimer.singleShot(2500, self._print_geometry)      # one line for diagnosing a wrong picture
 
         # Wires the 4 physical hardware buttons to this window's own
         # go_to_page() -- the SAME method the old on-screen buttons
@@ -340,6 +351,19 @@ class MainWindowHi(QMainWindow):
             self.banner_label.setText("वैदिक घड़ी")
             self.page1.show_message(None)
             self._shutting_down = False
+
+    def _print_geometry(self):
+        """One start-up line with the sizes really in use (to diagnose a trimmed / shifted picture)."""
+        scr = QApplication.instance().primaryScreen()
+        g = scr.availableGeometry()
+        msg = "[display] window %d x %d | screen %d x %d (full %d x %d) | pixel ratio %.2f" % (
+            self.width(), self.height(), g.width(), g.height(),
+            scr.geometry().width(), scr.geometry().height(), self.devicePixelRatioF())
+        c = self._content
+        msg += " | content %d x %d (page 1: %d x %d, minimum %d x %d)" % (
+            c.width(), c.height(), self.page1.width(), self.page1.height(),
+            c.minimumSizeHint().width(), c.minimumSizeHint().height())
+        print(msg, flush=True)
 
     def go_to_page(self, page_number: int):
         """page_number is 1-2: 1 = Home (dial page), 2 = Calendar.  Called by the
