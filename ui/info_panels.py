@@ -68,16 +68,38 @@ class InfoPanel(QWidget):
         self.font_family = font_family
         self.rows = []
         self.weights = None
+        self.sizes = None               # inline mode: text size in px for each row
+        # Text-size settings.  The values below are the landscape page's; the
+        # PORTRAIT page overrides them (bigger values on its small screen).
+        # val_frac_*  = size of the big value as a fraction of the PANEL height
+        # cap_min_ratio / cap_min_abs = smallest caption: that fraction of the
+        #               value size, but never below cap_min_abs pixels
+        self.val_frac_multi = 0.055     # row with a detail line, or with 2 cells
+        self.val_frac_single = 0.048    # one cell, no detail
+        self.val_frac_line = 0.046      # compact one-line row (no caption)
+        self.cap_min_ratio = 0.56
+        self.cap_min_abs = 9.0
+        # INLINE mode (portrait page): every cell is ONE line,
+        #   caption : value  detail        e.g.  "सूर्योदय : 06:26"
+        # instead of caption / value / detail stacked.  inline_px_frac is the text
+        # size as a fraction of the ROW height; lines that are too wide shrink.
+        self.inline = False
+        self.inline_px_frac = 0.60
+        self.inline_min_px_multi = 0    # smallest size for rows with 2 cells (0 = no floor)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
-    def set_rows(self, rows, weights=None):
+    def set_rows(self, rows, weights=None, sizes=None):
         """rows: list of rows; each row is a list of 1 or 2 cells
         (caption, value[, detail]).  An EMPTY caption makes a compact one-line row.
         weights: optional relative height of each row.  Give the SAME weights to
-        the left and right panel and their separator lines line up exactly."""
-        if rows != self.rows or weights != self.weights:
+        the left and right panel and their separator lines line up exactly.
+        sizes: INLINE mode only - the text size in px of each row (None or 0 for a
+        row = automatic, from the row height).  A line that is still too wide at
+        its size shrinks, so nothing is ever cut off."""
+        if rows != self.rows or weights != self.weights or sizes != self.sizes:
             self.rows = rows
             self.weights = weights
+            self.sizes = sizes
             self.update()
 
     def paintEvent(self, event):
@@ -108,6 +130,10 @@ class InfoPanel(QWidget):
                 else:
                     weights.append(1.0)
         unit = (h - 2 * pad) / max(0.001, sum(weights))
+        if self.inline:
+            self._paint_inline(p, w, h, pad, unit, weights)
+            p.end()
+            return
         y_cursor = pad
         for i, cells in enumerate(self.rows):
             row_h = unit * weights[i]
@@ -134,11 +160,12 @@ class InfoPanel(QWidget):
                 # BIG VALUE: its size is based on the PANEL height (not the row
                 # height), so adding rows does not shrink it.
                 if not caption:
-                    val_px0 = h * 0.046          # compact one-line row (city, ritu)
+                    val_px0 = h * self.val_frac_line      # compact one-line row (city, ritu)
                 else:
-                    val_px0 = h * (0.055 if (detail or len(cells) == 2) else 0.048)
+                    val_px0 = h * (self.val_frac_multi if (detail or len(cells) == 2)
+                                   else self.val_frac_single)
                 # Captions must stay readable: never below ~56% of the value size.
-                cap_min = max(9.0, val_px0 * 0.56)
+                cap_min = max(self.cap_min_abs, val_px0 * self.cap_min_ratio)
                 cap_px = max(cap_min, row_h * 0.20)
                 det_px = max(cap_min * 0.92, row_h * 0.19)
                 val_px = val_px0
@@ -174,6 +201,77 @@ class InfoPanel(QWidget):
                 if detail:
                     draw_line(p, df, QColor("#f3dcae"), x0, cell_w, y_val + hv + gap, detail)
         p.end()
+
+
+def _inline_parts(cell):
+    """(text, colour, bold, size factor) pieces of one inline line."""
+    caption, value = cell[0], cell[1]
+    detail = cell[2] if len(cell) > 2 else ""
+    parts = []
+    if caption:
+        parts.append((caption + " : ", C_CAPTION, False, 1.0))
+    parts.append((value, C_VALUE, True, 1.0))
+    if detail:
+        parts.append(("  " + detail, QColor("#f3dcae"), False, 0.76))
+    return parts
+
+
+def _inline_width(family, parts, px):
+    """Width of one inline line (all its pieces) at base size px."""
+    total = 0
+    for (t, _c, bold, fac) in parts:
+        total += QFontMetrics(_font(family, max(6, round(px * fac)), bold)).horizontalAdvance(t)
+    return total
+
+
+def _inline_paint_method(self, p, w, h, pad, unit, weights):
+    """INLINE mode of InfoPanel: one line per cell, caption in gold, value in
+    cream bold, optional small detail after it.  The size starts from the row
+    height and shrinks (the whole row together) only if a line is too wide."""
+    y_cursor = pad
+    for i, cells in enumerate(self.rows):
+        row_h = unit * weights[i]
+        y0 = y_cursor
+        y_cursor += row_h
+        cell_w = (w - 2 * pad) / max(1, len(cells))
+        if i > 0:
+            p.setPen(QPen(C_RULE, max(1.0, h * 0.002)))
+            p.drawLine(int(pad * 2), int(y0), int(w - pad * 2), int(y0))
+        # pass 1: the biggest size at which EACH cell fits; the whole row then uses
+        # the smallest of them, so the cells of one row always have the same size
+        max_w = cell_w * (0.90 if len(cells) > 1 else 0.94)   # a little air beside the divider
+        start_px = max(6, int(row_h * self.inline_px_frac))
+        if self.sizes and len(self.sizes) == len(self.rows) and self.sizes[i]:
+            start_px = int(self.sizes[i])                      # size chosen by the page
+        row_px = start_px
+        cell_parts = [_inline_parts(cell) for cell in cells]
+        floor = max(6, self.inline_min_px_multi) if len(cells) > 1 else 6
+        for parts in cell_parts:
+            px = start_px
+            while px > floor and _inline_width(self.font_family, parts, px) > max_w:
+                px -= 1
+            row_px = min(row_px, px)
+        # pass 2: draw
+        for k, parts in enumerate(cell_parts):
+            x0 = pad + k * cell_w
+            if k > 0:
+                p.setPen(QPen(C_RULE, max(1.0, h * 0.002)))
+                p.drawLine(int(x0), int(y0 + row_h * 0.18), int(x0), int(y0 + row_h * 0.82))
+            fonts = [_font(self.font_family, max(6, round(row_px * fac)), bold)
+                     for (_t, _c, bold, fac) in parts]
+            widths = [QFontMetrics(f).horizontalAdvance(t)
+                      for f, (t, _c, _b, _f) in zip(fonts, parts)]
+            x = x0 + (cell_w - sum(widths)) / 2.0
+            top = y0 + (row_h - LINE_H * row_px) / 2.0
+            base = top + ASCENT * row_px
+            for f, wd, (t, colour, _b, _f) in zip(fonts, widths, parts):
+                p.setFont(f)
+                p.setPen(colour)
+                p.drawText(QPointF(x, base), t)
+                x += wd
+
+
+InfoPanel._paint_inline = _inline_paint_method
 
 
 class BannerBar(QWidget):
@@ -261,6 +359,18 @@ class CornerCard(QWidget):
         self._swastik = None            # original picture, loaded once
         self._swastik_scaled = None     # scaled copy for the current card size
         self._swastik_side = 0
+        # Text layout, as fractions of the card height (landscape values; the
+        # portrait page changes them, its cards are only 43 px tall).
+        #   title_frac  size of line 1      detail_frac  size of line 2
+        #   split       where line 1's box ends and line 2's box starts
+        self.title_frac = 0.31
+        self.detail_frac = 0.24
+        self.split = 0.60
+        # True = size and place the text with FONT-INDEPENDENT line heights (the
+        # same method the side panels use).  The default (False) asks the font for
+        # its line height, and Windows reports a very tall one for Noto Sans
+        # Devanagari, which made the portrait page shrink 17 px text to 13 px.
+        self.font_independent = False
         self.setAttribute(Qt.WA_TranslucentBackground, True)
 
     def set_content(self, line1="", line2=""):
@@ -269,8 +379,43 @@ class CornerCard(QWidget):
             self.line1, self.line2 = line1, line2
             self.update()
 
+    def _wrap_words(self, font, text, max_w):
+        """Greedy word wrap by measured width -> list of lines."""
+        fm = QFontMetrics(font)
+        lines, cur = [], ""
+        for word in text.split(" "):
+            trial = word if not cur else cur + " " + word
+            if not cur or fm.horizontalAdvance(trial) <= max_w:
+                cur = trial
+            else:
+                lines.append(cur)
+                cur = word
+        if cur:
+            lines.append(cur)
+        return lines
+
+    def _draw_fitted_fixed(self, p, box, text, start_px, bold, color, min_px=7):
+        """Like _draw_fitted, but every line is LINE_H * size tall whatever the font
+        says, and lines are drawn one by one with draw_line()."""
+        px = int(start_px)
+        while True:
+            f = _font(self.font_family, px, bold)
+            lines = self._wrap_words(f, text, box.width())
+            need = len(lines) * px * LINE_H
+            fm = QFontMetrics(f)
+            wide = any(fm.horizontalAdvance(l) > box.width() + 1 for l in lines)
+            if (need <= box.height() and not wide) or px <= min_px:
+                break
+            px -= 1
+        top = box.top() + (box.height() - need) / 2.0
+        for i, line in enumerate(lines):
+            draw_line(p, f, color, box.left(), box.width(), top + i * px * LINE_H, line)
+
     def _draw_fitted(self, p, box, text, start_px, bold, color, min_px=7):
         """Draw `text` wrapped and centred in `box` with the biggest font that fits."""
+        if self.font_independent:
+            self._draw_fitted_fixed(p, box, text, start_px, bold, color, min_px)
+            return
         flags = Qt.AlignCenter | Qt.TextWordWrap
         px = int(start_px)
         while True:
@@ -310,12 +455,12 @@ class CornerCard(QWidget):
             p.end()
             return
         gold = QColor("#f6b730")
-        title_px = h * 0.31             # SAME size on the festival and eclipse cards
+        title_px = h * self.title_frac  # SAME size on the festival and eclipse cards
         if self.line2:
-            top = QRectF(w * 0.03, h * 0.04, w * 0.94, h * 0.56)
-            bot = QRectF(w * 0.03, h * 0.60, w * 0.94, h * 0.37)
+            top = QRectF(w * 0.03, h * 0.04, w * 0.94, h * (self.split - 0.04))
+            bot = QRectF(w * 0.03, h * self.split, w * 0.94, h * (0.97 - self.split))
             self._draw_fitted(p, top, self.line1, title_px, True, gold)
-            self._draw_fitted(p, bot, self.line2, h * 0.24, False, C_VALUE)
+            self._draw_fitted(p, bot, self.line2, h * self.detail_frac, False, C_VALUE)
         else:
             # long names wrap onto two lines at the same size; the font shrinks
             # only if even two lines do not fit

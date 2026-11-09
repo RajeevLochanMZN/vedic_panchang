@@ -75,9 +75,49 @@ from rtc import (
 from wifi_setup import enter_wifi_setup_mode
 
 from page_vedic_dial_hi import PageVedicDialHi
+from page_vedic_dial_portrait_hi import PageVedicDialPortraitHi
 from page_calendar_hi import PageCalendarHi
 from scaling import px
 from translations_hi import get_devanagari_font_family
+
+
+def choose_layout(screen_size):
+    """Which dial page to build: ("portrait" | "landscape", where the choice came from).
+    First one that gives a valid answer wins:
+      1. environment variable  VEDICGHADI_LAYOUT=portrait|landscape   (testing)
+      2. ~/.config/vedicghadi/screen_layout.txt   one word on the first line;
+         per device, outside git (same place as display_mode.txt)  <- use this on Pi 2
+      3. settings.yaml   screen_layout: auto | portrait | landscape
+      4. automatic: a screen taller than wide gets portrait, anything else landscape
+    "auto", an empty file or a missing key all mean: go on to the next one."""
+    def norm(value, source):
+        v = str(value or "").strip().lower()
+        if v in ("portrait", "landscape"):
+            return v
+        if v and v != "auto":
+            print("[display] ignoring screen_layout %r from %s "
+                  "(use portrait, landscape or auto)" % (v, source), flush=True)
+        return ""
+
+    v = norm(os.environ.get("VEDICGHADI_LAYOUT"), "VEDICGHADI_LAYOUT")
+    if v:
+        return v, "environment variable VEDICGHADI_LAYOUT"
+    path = os.path.join(os.path.expanduser("~"), ".config", "vedicghadi", "screen_layout.txt")
+    try:
+        with open(path, encoding="utf-8") as f:
+            v = norm(f.readline(), path)
+    except OSError:
+        v = ""
+    if v:
+        return v, path
+    try:
+        v = norm(load_settings().get("screen_layout"), "settings.yaml")
+    except Exception:
+        v = ""
+    if v:
+        return v, "settings.yaml screen_layout"
+    return ("portrait" if screen_size.height() > screen_size.width() else "landscape",
+            "automatic (screen shape)")
 
 
 class MainWindowHi(QMainWindow):
@@ -92,7 +132,15 @@ class MainWindowHi(QMainWindow):
 
         self.stacked_widget = QStackedWidget()
 
-        self.page1 = PageVedicDialHi()    # button 1: Home (the dial page)
+        # button 1: Home (the dial page): PORTRAIT or LANDSCAPE page, see choose_layout()
+        layout, why = choose_layout(screen_size)
+        portrait = (layout == "portrait")
+        print("[display] screen %d x %d -> %s dial page  (decided by: %s)" % (
+            screen_size.width(), screen_size.height(), layout.upper(), why), flush=True)
+        if portrait:
+            self.page1 = PageVedicDialPortraitHi()
+        else:
+            self.page1 = PageVedicDialHi()
         self.page2 = PageCalendarHi()     # button 2: Calendar
 
         for page in (self.page1, self.page2):

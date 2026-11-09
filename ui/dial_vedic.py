@@ -134,6 +134,11 @@ class VedicDial(QWidget):
         self.brahma_span = None
         self._cache = None
         self._cache_key = None
+        # Ring size and top margin (fractions of the widget height).  They start as
+        # the landscape page's values; the PORTRAIT page (page_vedic_dial_portrait.py)
+        # sets its own after creating the dial, e.g. fill 460/480, margin 10/480.
+        self.fill = DIAL_FILL
+        self.top_margin = DIAL_TOP_MARGIN
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     # ------------------------------------------------------------------ API
@@ -185,9 +190,9 @@ class VedicDial(QWidget):
         'सूर्योदय' tag that sits on the ring at the top."""
         w, h = self.width(), self.height()
         side = min(w, h)
-        R = side / 2.0 * DIAL_FILL
+        R = side / 2.0 * self.fill
         if h <= w:                      # height is the limit: use the margins
-            cy = h * DIAL_TOP_MARGIN + R
+            cy = h * self.top_margin + R
         else:                           # narrow widget: just centre it
             cy = h / 2.0
         return w / 2.0, cy, R
@@ -358,9 +363,14 @@ class VedicDial(QWidget):
         tw = fm.horizontalAdvance(text) + R * 0.06
         th = fm.height() + R * 0.012
         rect = QRectF(pt.x() - tw / 2.0, pt.y() - th / 2.0, tw, th)
-        # keep the tag inside the widget
+        # keep the tag inside the widget (the sides matter on a narrow, portrait
+        # screen, where the Abhijit tag on the right of the ring would be cut off)
         if rect.top() < 2:
             rect.moveTop(2)
+        if rect.right() > self.width() - 2:
+            rect.moveRight(self.width() - 2)
+        if rect.left() < 2:
+            rect.moveLeft(2)
         p.setPen(QPen(C_OUTER_EDGE, max(1.0, R * 0.004)))
         p.setBrush(C_GOLD)
         p.drawRoundedRect(rect, R * 0.012, R * 0.012)
@@ -370,7 +380,7 @@ class VedicDial(QWidget):
 
     # -------------------------------------------------------------- paint
     def paintEvent(self, event):
-        key = (self.width(), self.height(), tuple(self.muhurta_names),
+        key = (self.width(), self.height(), self.fill, self.top_margin, tuple(self.muhurta_names),
                tuple(self.pahar_names), round(self.day_ghati, 2),
                tuple(sorted(self.labels.items())), self._spans())
         if self._cache is None or self._cache_key != key:
