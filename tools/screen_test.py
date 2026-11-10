@@ -17,6 +17,12 @@ Look at the screen:
     circle oval / square a box    -> the picture is stretched AFTER the program draws it
 Optional:  python3 tools/screen_test.py --save /tmp/t.png   writes what the program drew, and quits.
 
+FINDING THE RIGHT ASPECT BY EYE (nothing to measure, nothing to type between steps):
+    python3 tools/screen_test.py --rotate 270 --sweep
+  shows the same picture again and again, 5 seconds each, with a different aspect value written
+  at the bottom (0.94 ... 1.13).  Watch the panel upright and note the value where the circle is
+  ROUND and the square is a SQUARE.  Ctrl+C stops it.  Then:  bash tools/set_display.sh pixel-aspect <value>
+
 IN-PROGRAM ROTATION (what the clock does with app_rotation.txt):
     python3 tools/screen_test.py --rotate 90      the test picture is turned by the program itself
     python3 tools/screen_test.py --rotate 270     (the desktop's own rotation must be "normal")
@@ -33,6 +39,8 @@ from PyQt5.QtWidgets import QApplication, QWidget
 
 
 class T(QWidget):
+    extra = ""                      # one more line of text (the sweep shows its aspect value here)
+
     def keyPressEvent(self, e):
         if e.key() in (Qt.Key_Escape, Qt.Key_Q):
             QApplication.quit()
@@ -65,6 +73,8 @@ class T(QWidget):
                  "pixel ratio %.2f" % self.devicePixelRatioF(),
                  "platform %s" % QApplication.platformName(),
                  "circle round? square square?"]
+        if self.extra:
+            lines.insert(0, self.extra)
         y = h - 24 * len(lines) - 10
         for t in lines:
             p.drawText(QRectF(0, y, w, 24), Qt.AlignHCenter, t)
@@ -79,6 +89,35 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     size = app.primaryScreen().availableGeometry().size()
     rot = int(sys.argv[sys.argv.index("--rotate") + 1]) if "--rotate" in sys.argv else 0
+    if "--sweep" in sys.argv and rot:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui"))
+        from rotated_host import RotatedHost
+        from PyQt5.QtCore import QTimer
+        values = [0.94, 0.97, 1.00, 1.03, 1.05, 1.067, 1.08, 1.10, 1.13]
+        steps = int(sys.argv[sys.argv.index("--steps") + 1]) if "--steps" in sys.argv else 0   # testing only
+        state = {"i": 0, "win": None, "n": 0}
+
+        def next_value():
+            v = values[state["i"] % len(values)]
+            state["i"] += 1
+            state["n"] += 1
+            if steps and state["n"] > steps:
+                QApplication.quit()
+                return
+            content = T()
+            content.extra = "ASPECT %.3f" % v
+            new = RotatedHost(content, size.width(), size.height(), rot, v)
+            new.setWindowTitle("screen test")
+            new.showFullScreen()
+            if state["win"] is not None:
+                state["win"].close()
+            state["win"] = new
+
+        next_value()
+        timer = QTimer()
+        timer.timeout.connect(next_value)
+        timer.start(5000 if not steps else 200)
+        sys.exit(app.exec_())
     if rot:
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui"))
         from rotated_host import RotatedHost
