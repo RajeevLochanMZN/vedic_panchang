@@ -255,7 +255,11 @@ class PortraitLayoutMixin:
     def resizeEvent(self, event):
         self._portrait_setup()
         W, H = self.width(), self.height()
-        u = min(W / float(DESIGN_W), H / float(DESIGN_H))       # one scale factor
+        # one scale factor.  The height that matters is the part really used (to the bottom of the
+        # cards), not the full 800: with square pixels on a panel that needs a shorter page
+        # (e.g. 480 x 743) the whole layout then shrinks a little instead of being cut off.
+        used_h = CARD_Y + CARD_H + 1
+        u = min(W / float(DESIGN_W), H / float(used_h))
         ox = (W - DESIGN_W * u) / 2.0                           # centre sideways if not exactly 3:5
         oy = 0.0                                                # any extra height stays at the BOTTOM
 
