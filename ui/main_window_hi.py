@@ -103,6 +103,30 @@ def app_rotation():
     return v or 0
 
 
+def pixel_aspect():
+    """How much WIDER than tall one pixel of this panel is (1.0 = square pixels).
+    Many cheap 7-inch 800 x 480 panels are about 1.076: without the correction a round dial
+    comes out an oval.  First valid answer wins:  environment variable VEDICGHADI_PIXEL_ASPECT,
+    then the file ~/.config/vedicghadi/pixel_aspect.txt (per device, outside git).
+    Set it with:  bash tools/set_display.sh pixel-aspect 1.076      (only used with app_rotation)"""
+    def norm(value):
+        try:
+            v = float(str(value or "").strip())
+        except ValueError:
+            return None
+        return v if 0.8 <= v <= 1.3 else None
+    v = norm(os.environ.get("VEDICGHADI_PIXEL_ASPECT"))
+    if v is not None:
+        return v
+    path = os.path.join(os.path.expanduser("~"), ".config", "vedicghadi", "pixel_aspect.txt")
+    try:
+        with open(path, encoding="utf-8") as f:
+            v = norm(f.readline())
+    except OSError:
+        v = None
+    return v or 1.0
+
+
 def choose_layout(screen_size):
     """Which dial page to build: ("portrait" | "landscape", where the choice came from).
     First one that gives a valid answer wins:
@@ -154,7 +178,8 @@ class MainWindowHi(QMainWindow):
         # the program may turn its own picture (app_rotation); the pages are then laid out at the
         # LOGICAL size, e.g. 480 x 800 on an 800 x 480 panel turned by 90
         self.app_rot = app_rotation()
-        lw, lh = logical_size(phys_size.width(), phys_size.height(), self.app_rot)
+        self.pix_aspect = pixel_aspect() if self.app_rot else 1.0
+        lw, lh = logical_size(phys_size.width(), phys_size.height(), self.app_rot, self.pix_aspect)
         screen_size = QSize(lw, lh)
 
         self.stacked_widget = QStackedWidget()
@@ -164,8 +189,9 @@ class MainWindowHi(QMainWindow):
         portrait = (layout == "portrait")
         print("[display] screen %d x %d%s -> %s dial page  (decided by: %s)" % (
             screen_size.width(), screen_size.height(),
-            (" (program turns the picture by %d, panel is %d x %d)" % (
-                self.app_rot, phys_size.width(), phys_size.height())) if self.app_rot else "",
+            (" (program turns the picture by %d, panel is %d x %d, pixel aspect %.3f)" % (
+                self.app_rot, phys_size.width(), phys_size.height(), self.pix_aspect))
+            if self.app_rot else "",
             layout.upper(), why), flush=True)
         if portrait:
             self.page1 = PageVedicDialPortraitHi()
@@ -199,7 +225,7 @@ class MainWindowHi(QMainWindow):
             for w in (self.stacked_widget, self.page1, self.page2):
                 w.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
             self.setCentralWidget(RotatedHost(central, phys_size.width(), phys_size.height(),
-                                              self.app_rot))
+                                              self.app_rot, self.pix_aspect))
         else:
             self.setCentralWidget(central)
         QTimer.singleShot(2500, self._print_geometry)      # one line for diagnosing a wrong picture

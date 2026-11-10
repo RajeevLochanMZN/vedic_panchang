@@ -7,7 +7,7 @@ clock program or from the way the Pi / desktop shows a rotated screen.
 Run on the Pi (after the rotation is applied):
     source venv/bin/activate
     export DISPLAY=:0 QT_QPA_PLATFORM=xcb
-    python3 tools/screen_test.py            (Ctrl+C or Esc to quit)
+    python3 tools/screen_test.py            (Ctrl+C in the terminal, or Esc / Q on the Pi's keyboard, quits)
 
 It fills the screen and draws:
     a big CIRCLE, a SQUARE (the square's sides are 200 px), two diagonal lines corner to corner,
@@ -20,6 +20,8 @@ Optional:  python3 tools/screen_test.py --save /tmp/t.png   writes what the prog
 IN-PROGRAM ROTATION (what the clock does with app_rotation.txt):
     python3 tools/screen_test.py --rotate 90      the test picture is turned by the program itself
     python3 tools/screen_test.py --rotate 270     (the desktop's own rotation must be "normal")
+  Add  --aspect 1.076  to correct panels whose pixels are not square (circle oval along the long side):
+    python3 tools/screen_test.py --rotate 270 --aspect 1.076
   The arrow marked UP must point to the TOP of the screen as you look at it, the circle must be
   round and the square square.  The rotation that does that is the one for app_rotation.txt:
     bash tools/set_display.sh app-rotate 90   (or 270)
@@ -32,7 +34,7 @@ from PyQt5.QtWidgets import QApplication, QWidget
 
 class T(QWidget):
     def keyPressEvent(self, e):
-        if e.key() == Qt.Key_Escape:
+        if e.key() in (Qt.Key_Escape, Qt.Key_Q):
             QApplication.quit()
 
     def paintEvent(self, ev):
@@ -72,6 +74,8 @@ class T(QWidget):
 
 if __name__ == "__main__":
     import os
+    import signal
+    signal.signal(signal.SIGINT, signal.SIG_DFL)   # Ctrl+C quits at once
     app = QApplication(sys.argv)
     size = app.primaryScreen().availableGeometry().size()
     rot = int(sys.argv[sys.argv.index("--rotate") + 1]) if "--rotate" in sys.argv else 0
@@ -79,7 +83,8 @@ if __name__ == "__main__":
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui"))
         from rotated_host import RotatedHost
         content = T()
-        win = RotatedHost(content, size.width(), size.height(), rot)
+        asp = float(sys.argv[sys.argv.index("--aspect") + 1]) if "--aspect" in sys.argv else 1.0
+        win = RotatedHost(content, size.width(), size.height(), rot, asp)
     else:
         win = T()
         win.resize(size)

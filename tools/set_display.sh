@@ -14,11 +14,16 @@
 #                                              Use this on Pi 2 if "rotate" shows a stretched picture
 #                                              (the desktop stretches X11 programs on a rotated screen).
 #                                              The screen stays 800x480; the clock draws portrait itself.
+#   bash tools/set_display.sh pixel-aspect 1.076   panel with NON-SQUARE pixels (many 7-inch 800x480
+#                                              panels: circles come out as ovals).  1.076 = each pixel is
+#                                              7.6 % wider than tall; 1 = square.  Only used together with
+#                                              app-rotate.  Test first:  tools/screen_test.py --rotate 270 --aspect 1.076
 #   then:  sudo reboot
 #
 # How it works:
 #   "rotate" writes ~/.config/vedicghadi/screen_rotation.txt, also read by apply_display_mode.sh.
 #   "app-rotate" writes ~/.config/vedicghadi/app_rotation.txt, read by ui/main_window_hi.py.
+#   "pixel-aspect" writes ~/.config/vedicghadi/pixel_aspect.txt, read by ui/main_window_hi.py.
 #   "auto" / "WxH" write ~/.config/vedicghadi/display_mode.txt, read by apply_display_mode.sh
 #          (hook in ~/.config/labwc/autostart, installed by tools/pi_display_fix.sh).
 #   "force" adds  video=<output>:WxH@60D  to /boot/firmware/cmdline.txt (needs sudo, keeps a backup
@@ -29,6 +34,7 @@ set -e
 DISPLAY_FILE="${VEDICGHADI_DISPLAY_FILE:-$HOME/.config/vedicghadi/display_mode.txt}"
 ROTATION_FILE="${VEDICGHADI_ROTATION_FILE:-$HOME/.config/vedicghadi/screen_rotation.txt}"
 APP_ROTATION_FILE="${VEDICGHADI_APP_ROTATION_FILE:-$HOME/.config/vedicghadi/app_rotation.txt}"
+PIXEL_ASPECT_FILE="${VEDICGHADI_PIXEL_ASPECT_FILE:-$HOME/.config/vedicghadi/pixel_aspect.txt}"
 CMDLINE="${VEDICGHADI_CMDLINE:-/boot/firmware/cmdline.txt}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
@@ -65,6 +71,7 @@ case "$cmd" in
     echo "   display_mode.txt : $( [ -f "$DISPLAY_FILE" ] && cat "$DISPLAY_FILE" || echo '(none = auto)')"
     echo "   screen_rotation  : $( [ -f "$ROTATION_FILE" ] && cat "$ROTATION_FILE" || echo '(none = normal)')   (desktop turns the screen)"
     echo "   app_rotation     : $( [ -f "$APP_ROTATION_FILE" ] && cat "$APP_ROTATION_FILE" || echo '(none = normal)')   (the clock turns its own picture)"
+    echo "   pixel_aspect     : $( [ -f "$PIXEL_ASPECT_FILE" ] && cat "$PIXEL_ASPECT_FILE" || echo '(none = 1, square pixels)')"
     echo "   kernel video=    : $(grep -oE 'video=HDMI-A-[0-9]+:[^ ]*' "$CMDLINE" 2>/dev/null || echo '(none)')"
     ;;
   auto)
@@ -110,9 +117,18 @@ case "$cmd" in
     echo "app_rotation.txt: $want   (read when the clock starts; the screen itself stays as it is)"
     echo "done -- restart the clock (or: sudo reboot).  Upside down? use the other one of 90 / 270."
     ;;
+  pixel-aspect)
+    want="${2:-}"
+    if ! [[ "$want" =~ ^[0-9]+(\.[0-9]+)?$ ]] || ! awk -v v="$want" 'BEGIN { exit !(v >= 0.8 && v <= 1.3) }'; then
+      echo "usage: set_display.sh pixel-aspect 1.076      (a number from 0.8 to 1.3; 1 = square pixels)"; exit 1
+    fi
+    mkdir -p "$(dirname "$PIXEL_ASPECT_FILE")"; echo "$want" > "$PIXEL_ASPECT_FILE"
+    echo "pixel_aspect.txt: $want   (read when the clock starts; used together with app-rotate)"
+    echo "done -- restart the clock (or: sudo reboot)."
+    ;;
   *)
     want="$cmd"
-    [[ "$want" =~ ^[0-9]+x[0-9]+$ ]] || { echo "usage: set_display.sh show | auto | WxH | force WxH | rotate N|90|180|270 | app-rotate N|90|180|270"; exit 1; }
+    [[ "$want" =~ ^[0-9]+x[0-9]+$ ]] || { echo "usage: set_display.sh show | auto | WxH | force WxH | rotate N|90|180|270 | app-rotate N|90|180|270 | pixel-aspect 1.076"; exit 1; }
     if ! printf '%s\n' "$LIST" | awk '/px/ {print $1}' | grep -qx "$want"; then
       echo "ERROR: this screen does not offer $want. Offered sizes:"
       printf '%s\n' "$LIST" | awk '/px/ {print "   " $1}' | sort -u

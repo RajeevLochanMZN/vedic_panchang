@@ -256,8 +256,8 @@ class PortraitLayoutMixin:
         self._portrait_setup()
         W, H = self.width(), self.height()
         u = min(W / float(DESIGN_W), H / float(DESIGN_H))       # one scale factor
-        ox = (W - DESIGN_W * u) / 2.0                           # centre if not exactly 3:5
-        oy = (H - DESIGN_H * u) / 2.0
+        ox = (W - DESIGN_W * u) / 2.0                           # centre sideways if not exactly 3:5
+        oy = 0.0                                                # any extra height stays at the BOTTOM
 
         def rect(x, y, w, h):
             return QRect(int(round(ox + x * u)), int(round(oy + y * u)),
