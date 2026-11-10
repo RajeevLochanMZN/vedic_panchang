@@ -53,9 +53,9 @@ DESIGN_W, DESIGN_H = 480, 800
 DIAL_DIAMETER = 460          # visible ring
 DIAL_TOP = 10                # empty space above the ring (also left and right: 10 px)
 
-BANNER_Y, BANNER_H = 477, 26         # starts below the sunset tag on the ring
-PANEL_Y, PANEL_H = 506, 190         # one-line rows need far less height than before
-CARD_Y, CARD_H = 699, 72            # cards follow the panels (taller now: the strip at the bottom is used)
+BANNER_Y, BANNER_H = 477, 31         # starts below the sunset tag on the ring; the text is 56% of the height = 17 px
+PANEL_Y, PANEL_H = 511, 190         # one-line rows need far less height than before
+CARD_Y, CARD_H = 704, 72            # cards follow the panels (taller now: the strip at the bottom is used)
 CARD_TITLE_PX, CARD_DETAIL_PX = 17, 14   # line 1 (aaj ka parv / grahan) and line 2 (date)
 MARGIN, GAP = 6, 4
 
