@@ -77,6 +77,7 @@ from wifi_setup import enter_wifi_setup_mode
 from page_vedic_dial_hi import PageVedicDialHi
 from page_vedic_dial_portrait_hi import PageVedicDialPortraitHi
 from page_calendar_hi import PageCalendarHi
+from touch_bar import TouchBar
 from rotated_host import RotatedHost, logical_size
 from scaling import px
 from translations_hi import get_devanagari_font_family
@@ -125,6 +126,30 @@ def pixel_aspect():
     except OSError:
         v = None
     return v or 1.0
+
+
+def touch_buttons_enabled():
+    """Show the three on-screen touch buttons at the bottom?  Default OFF (Pi 1 has none).
+    First valid answer wins:  environment variable VEDICGHADI_TOUCH_BUTTONS (1/0, on/off), then
+    the file ~/.config/vedicghadi/touch_buttons.txt (on | off; per device, outside git).
+    Set it with:  bash tools/set_display.sh touch-buttons on"""
+    def norm(value):
+        v = str(value or "").strip().lower()
+        if v in ("1", "on", "yes", "true"):
+            return True
+        if v in ("0", "off", "no", "false"):
+            return False
+        return None
+    v = norm(os.environ.get("VEDICGHADI_TOUCH_BUTTONS"))
+    if v is not None:
+        return v
+    path = os.path.join(os.path.expanduser("~"), ".config", "vedicghadi", "touch_buttons.txt")
+    try:
+        with open(path, encoding="utf-8") as f:
+            v = norm(f.readline())
+    except OSError:
+        v = None
+    return bool(v)
 
 
 def choose_layout(screen_size):
@@ -210,6 +235,19 @@ class MainWindowHi(QMainWindow):
         main_layout.addWidget(self.stacked_widget)
         self.banner_row = self._build_banner_row()
         main_layout.addWidget(self.banner_row)
+        # THREE ON-SCREEN TOUCH BUTTONS (ui/touch_bar.py), only where switched on for this device.
+        # They do exactly what the physical buttons do: 1 = clock <-> Calendar (the Calendar
+        # returns to the clock after idle_return_seconds), 2 = Wi-Fi/location setup,
+        # 3 = shutdown (touch twice within 5 s).  Every touch restarts the idle countdown.
+        self.touch_bar = None
+        if touch_buttons_enabled():
+            self.touch_bar = TouchBar(self.font_family)
+            main_layout.addWidget(self.touch_bar)
+            self.touch_bar.button1.connect(self.toggle_page)
+            self.touch_bar.button2.connect(enter_wifi_setup_mode)
+            self.touch_bar.button3.connect(self.shutdown_button_pressed)
+            for sig in (self.touch_bar.button1, self.touch_bar.button2, self.touch_bar.button3):
+                sig.connect(self._restart_idle)
         # the dial page has its own banner, so the plain banner row is hidden there
         self.stacked_widget.currentChanged.connect(self._on_page_changed)
         central.setLayout(main_layout)
@@ -310,6 +348,8 @@ class MainWindowHi(QMainWindow):
         """Banner row on every page except the dial page (index 0); the idle countdown
         runs only away from Home."""
         self.banner_row.setVisible(index != 0)
+        if self.touch_bar is not None:
+            self.touch_bar.set_page(index)
         self._restart_idle()
 
     def _restart_idle(self):
@@ -335,6 +375,8 @@ class MainWindowHi(QMainWindow):
             return
         self._shutdown_armed = True
         self._disarm_timer.start(5000)
+        if self.touch_bar is not None:
+            self.touch_bar.set_armed(True)
         ask = "बंद करने के लिए फिर से दबाएँ"
         self.banner_label.setText(ask)
         self.page1.show_message(ask)
@@ -342,6 +384,8 @@ class MainWindowHi(QMainWindow):
     def _disarm_shutdown(self):
         self._shutdown_armed = False
         self._disarm_timer.stop()
+        if self.touch_bar is not None:
+            self.touch_bar.set_armed(False)
         if not self._shutting_down:
             self.banner_label.setText("वैदिक घड़ी")
             self.page1.show_message(None)
