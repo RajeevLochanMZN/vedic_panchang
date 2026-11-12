@@ -78,6 +78,7 @@ from wifi_setup import enter_wifi_setup_mode
 from page_vedic_dial_hi import PageVedicDialHi
 from page_vedic_dial_portrait_hi import PageVedicDialPortraitHi
 from page_calendar_hi import PageCalendarHi
+from page_calendar_portrait_hi import PageCalendarPortraitHi
 from touch_bar import TouchBar, BAR_HEIGHT
 from popup_card import PopupCard, C_RED
 import wifi_setup as wifi_setup_module
@@ -256,7 +257,8 @@ class MainWindowHi(QMainWindow):
             self.page1 = PageVedicDialPortraitHi()
         else:
             self.page1 = PageVedicDialHi()
-        self.page2 = PageCalendarHi()     # button 2: Calendar
+        # button 2: Calendar - the portrait layout (7 narrow columns) on a portrait screen
+        self.page2 = PageCalendarPortraitHi() if portrait else PageCalendarHi()
 
         for page in (self.page1, self.page2):
             self.stacked_widget.addWidget(page)
@@ -294,6 +296,9 @@ class MainWindowHi(QMainWindow):
         self.popup = PopupCard(self.font_family, central)
         self.popup.reserve_bottom = BAR_HEIGHT if self.touch_bar is not None else 0
         self._placer = OverlayPlacer(central, self.touch_bar, self.popup)
+        if hasattr(self.page2, "reserve_bottom"):          # keep the bottom strip of the Calendar free
+            self.page2.reserve_bottom = BAR_HEIGHT if self.touch_bar is not None else 0
+            self.page2.relayout()
         self._setup_state = "idle"                    # idle | countdown | running
         self._setup_left = 0
         self._setup_timer = QTimer(self)
@@ -396,7 +401,8 @@ class MainWindowHi(QMainWindow):
     def _on_page_changed(self, index):
         """Banner row on every page except the dial page (index 0); the idle countdown
         runs only away from Home."""
-        self.banner_row.setVisible(index != 0)
+        # (with the touch buttons the pop-up cards replace the banner, so the Calendar gets the room)
+        self.banner_row.setVisible(index != 0 and self.touch_bar is None)
         if self.touch_bar is not None:
             self.touch_bar.set_page(index)
         self._restart_idle()
