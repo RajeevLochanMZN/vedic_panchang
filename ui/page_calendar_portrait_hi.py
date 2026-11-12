@@ -5,8 +5,8 @@ Same data and colours as page_calendar_hi.py (it uses that file's day computatio
 for a narrow tall screen: 7 columns of about 64 px.  Every day cell is painted directly:
 
     +--------+
-    |12   शु |   day number (big), paksha: शु = शुक्ल, कृ = कृष्ण
-    |तृतीया  |   tithi at sunrise
+    |12      |   day number (big)
+    |शु तृतीया|   paksha (शु = शुक्ल, कृ = कृष्ण) and the tithi at sunrise, on ONE line
     |गोवर्धन |   festivals (wrapped, as many lines as fit, "…" if more)
     |पूजा    |
     +--------+
@@ -86,23 +86,33 @@ class DayCell(QWidget):
         pad = max(3, w * 0.05)
         inner = w - 2 * pad
         y = 2.0
-        # day number (left) and paksha letters (right)
+        # day number
         nf = _font(self.family, w * 0.40, True)
         p.setFont(nf)
         p.setPen(fg)
-        p.drawText(QRectF(pad, y + ASCENT * nf.pixelSize() - nf.pixelSize() * 1.0 + 0, inner, nf.pixelSize() * LINE_H),
-                   Qt.AlignLeft | Qt.AlignTop, self.day)
-        pf = _font(self.family, w * 0.20, True)
-        p.setFont(pf)
-        p.setPen(sub)
-        p.drawText(QRectF(pad, y + 2, inner, pf.pixelSize() * LINE_H), Qt.AlignRight | Qt.AlignTop, self.paksha)
+        p.drawText(QRectF(pad, y, inner, nf.pixelSize() * LINE_H), Qt.AlignLeft | Qt.AlignTop, self.day)
         y += nf.pixelSize() * LINE_H
-        # tithi, one line (shrunk if needed)
+        # second line: paksha letters + tithi, side by side (both shrink together if the line is too wide)
         if self.tithi:
-            tf = fit_font(_font(self.family, w * 0.21), self.tithi, inner)
+            t_px = max(6, int(w * 0.21))
+            while True:
+                tf = _font(self.family, t_px)
+                pf = _font(self.family, max(6, round(t_px * 0.85)), True)
+                pw = QFontMetrics(pf).horizontalAdvance(self.paksha) if self.paksha else 0
+                gap = 3 if self.paksha else 0
+                total = pw + gap + QFontMetrics(tf).horizontalAdvance(self.tithi)
+                if total <= inner or t_px <= 8:
+                    break
+                t_px -= 1
+            x = pad
+            if self.paksha:
+                p.setFont(pf)
+                p.setPen(C_DARK if self.today else (C_FEST_TEXT if self.paksha == "शु" else C_MUTED))
+                p.drawText(QRectF(x, y, pw + 2, pf.pixelSize() * LINE_H), Qt.AlignLeft | Qt.AlignTop, self.paksha)
+                x += pw + gap
             p.setFont(tf)
             p.setPen(sub if not self.today else C_DARK)
-            p.drawText(QRectF(pad, y, inner, tf.pixelSize() * LINE_H), Qt.AlignLeft | Qt.AlignTop, self.tithi)
+            p.drawText(QRectF(x, y, inner, tf.pixelSize() * LINE_H), Qt.AlignLeft | Qt.AlignTop, self.tithi)
             y += tf.pixelSize() * LINE_H + 1
         # festivals: wrapped, as many lines as fit
         if self.festivals:
