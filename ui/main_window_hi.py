@@ -56,12 +56,13 @@ KIOSK BEHAVIOUR (added together with setup.sh / launch.sh):
 import os
 import subprocess
 import sys
+import time
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QStackedWidget, QVBoxLayout,
     QHBoxLayout, QPushButton, QLabel, QLayout, QSizePolicy,
 )
-from PyQt5.QtCore import Qt, QTimer, QSize
+from PyQt5.QtCore import Qt, QTimer, QSize, QObject, QEvent
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "engine"))
 from ephemeris import init_ephemeris
@@ -77,7 +78,9 @@ from wifi_setup import enter_wifi_setup_mode
 from page_vedic_dial_hi import PageVedicDialHi
 from page_vedic_dial_portrait_hi import PageVedicDialPortraitHi
 from page_calendar_hi import PageCalendarHi
-from touch_bar import TouchBar
+from touch_bar import TouchBar, BAR_HEIGHT
+from popup_card import PopupCard, C_RED
+import wifi_setup as wifi_setup_module
 from touch_raw import connect_touch
 from rotated_host import RotatedHost, logical_size
 from scaling import px
@@ -199,6 +202,29 @@ def choose_layout(screen_size):
             "automatic (screen shape)")
 
 
+class OverlayPlacer(QObject):
+    """Keeps the touch buttons at the BOTTOM edge of the content and the pop-up centred above them.
+    They are drawn OVER the pages (not in the layout), so the page background continues behind the
+    buttons and they look like the other cards."""
+    def __init__(self, central, bar, popup):
+        super().__init__(central)
+        self.c, self.bar, self.popup = central, bar, popup
+        central.installEventFilter(self)
+        self.place()
+
+    def eventFilter(self, obj, ev):
+        if obj is self.c and ev.type() == QEvent.Resize:
+            self.place()
+        return False
+
+    def place(self):
+        w, h = self.c.width(), self.c.height()
+        if self.bar is not None:
+            self.bar.setGeometry(0, h - self.bar.height(), w, self.bar.height())
+            self.bar.raise_()
+        self.popup.reposition()
+
+
 class MainWindowHi(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -249,10 +275,9 @@ class MainWindowHi(QMainWindow):
         # 3 = shutdown (touch twice within 5 s).  Every touch restarts the idle countdown.
         self.touch_bar = None
         if touch_buttons_enabled():
-            self.touch_bar = TouchBar(self.font_family)
-            main_layout.addWidget(self.touch_bar)
+            self.touch_bar = TouchBar(self.font_family, central)     # drawn over the page, see OverlayPlacer
             self.touch_bar.button1.connect(self.toggle_page)
-            self.touch_bar.button2.connect(enter_wifi_setup_mode)
+            self.touch_bar.button2.connect(self.setup_button_pressed)
             self.touch_bar.button3.connect(self.shutdown_button_pressed)
             for sig in (self.touch_bar.button1, self.touch_bar.button2, self.touch_bar.button3):
                 sig.connect(self._restart_idle)
@@ -265,6 +290,17 @@ class MainWindowHi(QMainWindow):
         self.stacked_widget.currentChanged.connect(self._on_page_changed)
         central.setLayout(main_layout)
         self._content = central
+        # pop-up card (setup instructions, shutdown question) + placement of bar and pop-up
+        self.popup = PopupCard(self.font_family, central)
+        self.popup.reserve_bottom = BAR_HEIGHT if self.touch_bar is not None else 0
+        self._placer = OverlayPlacer(central, self.touch_bar, self.popup)
+        self._setup_state = "idle"                    # idle | countdown | running
+        self._setup_left = 0
+        self._setup_timer = QTimer(self)
+        self._setup_timer.timeout.connect(self._setup_tick)
+        self._shutdown_deadline = 0.0
+        self._shutdown_tick_timer = QTimer(self)
+        self._shutdown_tick_timer.timeout.connect(self._shutdown_tick)
         if self.app_rot:
             # inside the rotating view the content must take EXACTLY the logical size,
             # whatever the minimum size of its pages is
@@ -319,12 +355,12 @@ class MainWindowHi(QMainWindow):
         self.button_scheme = str(load_settings().get("button_scheme", "three")).strip().lower()
         if self.button_scheme == "three":
             self.button_controller.home_pressed.connect(self.toggle_page)
-            self.button_controller.panchang_pressed.connect(enter_wifi_setup_mode)
+            self.button_controller.panchang_pressed.connect(self.setup_button_pressed)
             self.button_controller.calendar_pressed.connect(self.shutdown_button_pressed)
         else:
             self.button_controller.home_pressed.connect(lambda: self.go_to_page(1))
             self.button_controller.panchang_pressed.connect(lambda: self.go_to_page(2))
-            self.button_controller.calendar_pressed.connect(enter_wifi_setup_mode)
+            self.button_controller.calendar_pressed.connect(self.setup_button_pressed)
         self.button_controller.shutdown_requested.connect(self.safe_shutdown)
         self._shutting_down = False
         # "three" scheme: the first press of the shutdown button only ARMS it for 5 seconds
@@ -380,28 +416,100 @@ class MainWindowHi(QMainWindow):
         self.go_to_page(2 if self.stacked_widget.currentIndex() == 0 else 1)
 
     def shutdown_button_pressed(self):
-        """Button 3: press once -> the banner asks to press again; press again within
-        5 seconds -> clean shutdown.  One accidental press does nothing."""
+        """Button 3: press once -> a pop-up card asks to press again; press again within
+        5 seconds -> clean shutdown.  One accidental press does nothing (the card goes away)."""
         if self._shutdown_armed:
             self._disarm_shutdown()
             self.safe_shutdown()
             return
+        if self._setup_state == "countdown":          # a pending setup start is cancelled first
+            self._cancel_setup()
         self._shutdown_armed = True
         self._disarm_timer.start(5000)
+        self._shutdown_deadline = time.monotonic() + 5.0
+        self._shutdown_tick_timer.start(100)
         if self.touch_bar is not None:
             self.touch_bar.set_armed(True)
-        ask = "बंद करने के लिए फिर से दबाएँ"
-        self.banner_label.setText(ask)
-        self.page1.show_message(ask)
+        self.popup.show_card(
+            "shutdown", "बंद करें?",
+            [("", "बंद करने के लिए", ""), ("", "", "बन्द करें"), ("", "बटन फिर से दबाएँ", "")],
+            footer="5 सेकंड में अपने आप रद्द हो जाएगा", progress=1.0, accent=C_RED, center=True)
+
+    def _shutdown_tick(self):
+        left = self._shutdown_deadline - time.monotonic()
+        if left > 0:
+            self.popup.set_progress(left / 5.0)
 
     def _disarm_shutdown(self):
         self._shutdown_armed = False
         self._disarm_timer.stop()
+        self._shutdown_tick_timer.stop()
         if self.touch_bar is not None:
             self.touch_bar.set_armed(False)
-        if not self._shutting_down:
-            self.banner_label.setText("वैदिक घड़ी")
-            self.page1.show_message(None)
+        if not self._shutting_down and self.popup.kind == "shutdown":
+            self.popup.close_card()
+
+    # ---- Wi-Fi / location setup: instructions card, with a few seconds to cancel a mistaken press
+    SETUP_DELAY_S = 8
+
+    def _setup_steps(self):
+        ssid = getattr(wifi_setup_module, "HOTSPOT_SSID", "VedicGhadi-Setup")
+        url = getattr(wifi_setup_module, "SETUP_URL", "http://10.42.0.1:5000")
+        pwd = getattr(wifi_setup_module, "HOTSPOT_PASSWORD", None)
+        steps = [("1", "मोबाइल में Wi-Fi खोलें और इस नेटवर्क से जुड़ें:", ssid)]
+        if pwd:
+            steps.append(("2", "पासवर्ड डालें:", pwd))
+        steps.append((str(len(steps) + 1), "मोबाइल के ब्राउज़र में यह पता खोलें:", url))
+        steps.append((str(len(steps) + 1), "Wi-Fi और स्थान भरकर सेव करें", ""))
+        return steps
+
+    def _show_setup_card(self):
+        if self._setup_state == "running":
+            footer = "सेटअप चालू है — ऊपर के चरण पूरे करें।  यह कार्ड छिपाने/दिखाने के लिए ‘सेटअप’ दबाएँ"
+            progress = None
+        else:
+            footer = ("सेटअप %d सेकंड में शुरू होगा (तब घड़ी का Wi-Fi बंद होगा)।  "
+                      "गलती से दबाया हो तो फिर ‘सेटअप’ दबाएँ" % self._setup_left)
+            progress = self._setup_left / float(self.SETUP_DELAY_S)
+        self.popup.show_card("setup", "Wi-Fi / स्थान सेटअप", self._setup_steps(), footer, progress)
+
+    def setup_button_pressed(self):
+        """Button 2 (physical or touch).
+          first press   : instructions card + countdown; setup starts when it reaches 0
+          second press  : while counting -> cancelled, nothing has happened
+                          after the start -> hides / shows the card again (setup keeps running)"""
+        if self._setup_state == "countdown":
+            self._cancel_setup()
+            return
+        if self._setup_state == "running":
+            if self.popup.isVisible() and self.popup.kind == "setup":
+                self.popup.close_card()
+            else:
+                self._show_setup_card()
+            return
+        if self._shutdown_armed:
+            self._disarm_shutdown()
+        self._setup_state = "countdown"
+        self._setup_left = self.SETUP_DELAY_S
+        self._show_setup_card()
+        self._setup_timer.start(1000)
+
+    def _cancel_setup(self):
+        self._setup_timer.stop()
+        self._setup_state = "idle"
+        if self.popup.kind == "setup":
+            self.popup.close_card()
+
+    def _setup_tick(self):
+        self._setup_left -= 1
+        if self._setup_left > 0:
+            self._show_setup_card()
+            return
+        self._setup_timer.stop()
+        self._setup_state = "running"
+        self._show_setup_card()
+        QApplication.processEvents()                  # paint the card before the Wi-Fi goes away
+        enter_wifi_setup_mode()
 
     def safe_shutdown(self):
         """
@@ -418,6 +526,8 @@ class MainWindowHi(QMainWindow):
         print("[main_window] Shutdown combo held -- shutting the Pi down cleanly.")
         self.banner_label.setText("बंद हो रहा है… कृपया प्रतीक्षा करें")
         self.page1.show_message("बंद हो रहा है… कृपया प्रतीक्षा करें")   # dial page banner
+        self.popup.show_card("shutdown_now", "बंद हो रहा है…",
+                             [("", "कृपया प्रतीक्षा करें", "")], accent=C_RED, center=True)
         QApplication.processEvents()  # paint the message before the system starts closing things down
         try:
             result = subprocess.run(
@@ -433,6 +543,7 @@ class MainWindowHi(QMainWindow):
             print(f"[main_window] Shutdown command failed: {detail}")
             self.banner_label.setText("वैदिक घड़ी")
             self.page1.show_message(None)
+            self.popup.close_card()
             self._shutting_down = False
 
     def _print_geometry(self):

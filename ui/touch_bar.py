@@ -24,7 +24,7 @@ from PyQt5.QtCore import Qt, QRectF, pyqtSignal
 from PyQt5.QtGui import QPainter, QPen, QColor, QFont
 from PyQt5.QtWidgets import QWidget
 
-from info_panels import C_PANEL_EDGE, C_VALUE, fit_font, draw_line, LINE_H
+from info_panels import C_PANEL_BG, C_PANEL_EDGE, C_VALUE, fit_font, draw_line, LINE_H
 
 BAR_HEIGHT = 76                  # px of the page; the buttons are 60 px tall inside it
 BUTTON_H = 60
@@ -33,7 +33,7 @@ SIDE = 6
 GAP = 6
 LABEL_PX = 20
 
-C_NORMAL = QColor(58, 16, 6, 215)
+C_NORMAL = C_PANEL_BG                 # exactly like the other cards (dark maroon, see-through)
 C_PRESSED = QColor(240, 179, 35, 235)
 C_ARMED = QColor(150, 30, 20, 240)
 
@@ -100,6 +100,7 @@ class TouchBar(QWidget):
 
     def __init__(self, font_family="Noto Sans Devanagari", parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)    # no background of its own: the page shows through
         self.setFixedHeight(BAR_HEIGHT)
         self.b1 = TouchButton(font_family, self)
         self.b2 = TouchButton(font_family, self)
