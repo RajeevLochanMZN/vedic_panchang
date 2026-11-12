@@ -1,48 +1,32 @@
-NEW DIAL PAGE -- WIRING PACKAGE (step 15)
-=========================================
-Unzip INTO your project folder (D:\myProjects\panchang-clock-structure\panchang-clock) so that
-ui/, engine/, config/, tests/ and data/ merge with the existing folders.  It REPLACES
-ui/main_window_hi.py (the only existing file it touches) -- keep a copy of the old one first.
+Portrait dial page for Pi 2 (480 x 800)  --  copy the 5 files into your project's ui/ folder
 
-BUTTONS NOW
-  button 1  Home      = the dial page            (GPIO17, as before)
-  button 2  Calendar  = the calendar page        (GPIO27, was "Panchang")
-  button 3  Setup     = Wi-Fi + location setup   (GPIO22, was "Calendar")
-  button 4  unused                               (GPIO23, was "Wi-Fi setup")
-  No rewiring.  Safe shutdown: hold button 2 + button 3 for 3 s (as before).
-  The Panchang page and the old Home page are no longer imported (files stay, unused).
-  Idle return: on the Calendar page with no button press for idle_return_seconds
-  (settings.yaml, default 300 = 5 min) the clock returns to Home.
+NEW      ui/page_vedic_dial_portrait.py      portrait layout (corner clock/date, 6-row panels) + PC preview
+NEW      ui/page_vedic_dial_portrait_hi.py   live page = PageVedicDialHi + that layout
+CHANGED  ui/dial_vedic.py      ring size/margin now settable (landscape values unchanged);
+                               tags are kept inside the widget sideways (fixes the clipped Abhijit tag)
+CHANGED  ui/info_panels.py     text-size settings added to InfoPanel (defaults = old landscape values)
+CHANGED  ui/main_window_hi.py  uses the portrait page when the screen is taller than wide
 
-NEW FILES
-  ui/background.py  ui/dial_vedic.py  ui/info_panels.py  ui/page_vedic_dial.py
-  ui/page_vedic_dial_hi.py   the live page (reads the real engine)
-  ui/city_names_hi.py        Hindi city name lookup (spelling-tolerant)
-  ui/dial_preview.py         sample-data preview, no engine needed
-  config/cities_hi.yaml      177 cities = the ESP32 setup list (176, names + coordinates from CityList.h)
-                             + Delhi, with Hindi names.  THE HINDI NAMES WERE WRITTEN BY CLAUDE (the ESP32
-                             ones are bitmaps) -- PLEASE REVIEW.  Edit freely: one line per city.
-  engine/festival_span.py  engine/festival_vyapti.py
-  tests/test_festival_vyapti.py
-  data/backgrounds/*.jpg   data/images/swastik.png
+Also in this zip (for Pi 2): ui/rotated_host.py (the clock turns its own picture), tools/set_display.sh
+(app-rotate), tools/apply_display_mode.sh, tools/screen_test.py.  See PI2_SETUP.txt for the steps.
 
-ONE ONE-LINE EDIT IN YOUR OWN FILE
-  config/festivals.yaml, holika_dahan:  change  tithi: 14  to  tithi: 15
+Pi 1 (landscape) keeps PageVedicDialHi, nothing visible changes there.
+page_vedic_dial_hi.py and page_vedic_dial.py are NOT changed.
 
-CITY NAME ON THE CLOCK
-  The name typed on the setup page is looked up in config/cities_hi.yaml:
-   - a misspelling is tolerated (Muzzafarnagar, Muzaffar Nagar, Muzafarnagr ...)
-   - the match must be within 60 km of the clock's coordinates, so a typo can never
-     pick a far-away city (Muzaffarpur stays "Muzaffarpur")
-   - a name that is not in the table is shown exactly as typed (English)
-   - a name already in Devanagari is shown as typed
-  Try it:   python ui/city_names_hi.py
+Test on the PC (venv active):
+  python ui/page_vedic_dial_portrait.py        sample data, 480x800 window
+  python ui/page_vedic_dial_portrait.py empty  swastik cards
+  python ui/page_vedic_dial_portrait_hi.py     live engine, 480x800 window
 
-TEST ON THE PC FIRST (activate the venv first:  .\venv\Scripts\Activate.ps1)
-  python ui/page_vedic_dial_hi.py          live page, real engine, no GPIO needed
-  python ui/dial_preview.py                sample data
-  python tests/test_festival_vyapti.py --selftest
-THEN: git add . / commit / push, and on the Pi: git pull, sudo reboot.
+Deploy: git add . / commit / push on the PC; on the Pi git pull, then (Pi 2 only)
+rotate the screen BEFORE the clock starts (wlr-randr --output <name> --transform 90 or 270).
 
-IF A VALUE STAYS "..." OR LOOKS WRONG: the page prints the error and keeps running --
-read it in the PC terminal, or on the Pi:  tail -n 40 /dev/shm/vedicghadi.log
+IMPORTANT: copy ALL FIVE files together.  The portrait page only sets sizes; the
+code that draws them lives in info_panels.py and dial_vedic.py.  With an old copy
+of either one the sizes silently stay at the old values.  The page now prints a
+"*** PORTRAIT PAGE: OLD FILE IN USE" warning in the console when that happens.
+
+Check what is really in use:   python ui/page_vedic_dial_portrait.py --check
+(prints the window size, scale factor and the pixel size of every text line).
+The test window must really be 480 x 800: on a screen shorter than ~860 px
+Windows shrinks it, and the whole page (text included) shrinks with it.

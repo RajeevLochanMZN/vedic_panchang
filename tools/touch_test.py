@@ -5,6 +5,8 @@ tools/touch_test.py -- do touches reach the clock program, and where do they lan
     export DISPLAY=:0 QT_QPA_PLATFORM=xcb
     python3 tools/touch_test.py --rotate 270 --aspect 1.067        (same two numbers as the clock uses)
     python3 tools/touch_test.py                                     (plain screen, no rotation)
+    python3 tools/touch_test.py --raw --rotate 270 --aspect 1.067   (read the USB touch chip directly,
+                                                                     the way the clock does in "raw" mode)
 
 Touch the screen: a ring appears exactly where Qt thinks you touched, the counters at the bottom
 count what arrived (mouse = touch turned into a mouse click, touch = a real touch event), and the
@@ -100,4 +102,9 @@ if __name__ == "__main__":
         win.resize(size)
     win.setWindowTitle("touch test")
     win.showFullScreen()
+    keep = None
+    if "--raw" in sys.argv:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "ui"))
+        from touch_raw import connect_touch
+        keep = connect_touch(size.width(), size.height())     # keep a reference so it is not collected
     sys.exit(app.exec_())

@@ -1,0 +1,94 @@
+PI 2 (Waveshare 7-inch, used upright) -- portrait dial page, the CLOCK turns its own picture
+=========================================================================================
+Why: tools/screen_test.py showed that the desktop (labwc + XWayland) STRETCHES every program
+on a screen rotated with wlr-randr (round circle -> oval).  So the screen stays as it is
+(800 x 480) and the clock turns its own picture by 90 degrees.  The desktop is not touched.
+
+Files in this zip
+  ui/    7 files  (portrait page, its shared files, rotated_host.py NEW, main_window_hi.py)
+  tools/ 3 files  (set_display.sh with "app-rotate", apply_display_mode.sh, screen_test.py)
+  launch.sh and pi_display_fix.sh are NOT changed.
+
+The setting (per device, outside git, like display_mode.txt):
+     ~/.config/vedicghadi/app_rotation.txt        normal | 90 | 180 | 270
+  The clock reads it when it starts, lays its pages out at 480 x 800 and turns them.
+  Pi 1 has no such file: nothing changes there.
+
+ON THE PC
+  1. Copy ui/ (7 files) and tools/ (3 files) into the project, over the old ones.
+  2. git add .   git commit -m "In-app rotation for Pi 2"   git push
+
+ON PI 2 ONLY (SSH, one command at a time; do not pull on Pi 1 yet)
+  1. Put the desktop rotation back to normal and stop the clock:
+       export WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/$(id -u)
+       wlr-randr --output HDMI-A-1 --transform normal
+       pkill -f launch.sh
+       pkill -f main_window_hi.py
+  2. Update:
+       cd ~/VedicGhadi
+       git pull
+  3. Choose the rotation:
+       bash tools/set_display.sh app-rotate 90
+  4. Run the clock by hand:
+       source venv/bin/activate
+       export DISPLAY=:0 QT_QPA_PLATFORM=xcb
+       python3 ui/main_window_hi.py
+     The first printed line should be:
+       [display] screen 480 x 800 (program turns the picture by 90, panel is 800 x 480) -> PORTRAIT dial page ...
+     The dial must be ROUND.  Upside down?  Ctrl+C, then:  bash tools/set_display.sh app-rotate 270
+                                            and run it again.
+  5. When it looks right:   sudo reboot      (the kiosk starts upright)
+
+UNDO:   bash tools/set_display.sh app-rotate normal ; sudo reboot
+CHECK:  bash tools/set_display.sh show
+
+FINDING THE RIGHT ROTATION (90 or 270) WITH THE TEST PICTURE
+  With the desktop rotation normal (wlr-randr shows Transform: normal), run each of
+       python3 tools/screen_test.py --rotate 90
+       python3 tools/screen_test.py --rotate 270
+  (Esc or Ctrl+C to quit).  Look at the panel in its upright position: the arrow marked UP must
+  point to the TOP, the circle must be round, the square a square.  Use that number:
+       bash tools/set_display.sh app-rotate <90 or 270>
+
+FINDING THE ASPECT NUMBER FOR THIS PANEL (do this by eye, 1 minute)
+  Photo of the clock with pixel-aspect 0.929: the dial ring measured 727 wide x 805 tall = vertically
+  stretched, so 0.929 is the WRONG way round.  The value is above 1; 1.067 means "the glass is 16:9":
+  the page is then drawn on 480 x 853 square pixels (exactly 16:9) and squeezed onto the 800 real pixels.
+  Find the exact value on the panel itself:
+       python3 tools/screen_test.py --rotate 270 --sweep
+  It changes the aspect every 5 seconds and writes the value at the bottom.  Note the value where the
+  circle is round and the square is a square, stop with Ctrl+C, then:
+       bash tools/set_display.sh pixel-aspect <value>        (write the leading 0 / digit: 1.067)
+       bash tools/set_display.sh show
+  Quick try of the clock itself without saving anything:
+       VEDICGHADI_PIXEL_ASPECT=1.067 python3 ui/main_window_hi.py
+
+ROUND DIAL ON A PANEL WITH NON-SQUARE PIXELS  (how the number works)
+  Measured on the photo of screen_test: circle 756 wide x 697 tall, square 364 x 340 -> everything is
+  about 7.6 % too long along the panel's 800-pixel side (= vertical when the panel is upright).
+  That is the usual 7-inch 800x480 panel: pixels 0.1926 x 0.179 mm.  The cure is a per-device number:
+       python3 tools/screen_test.py --rotate 270 --aspect 1.076      try it first: circle must be round
+       bash tools/set_display.sh pixel-aspect 1.076                  then keep it
+  The clock lays its page out on a grid of square pixels (480 x 861) and squeezes it onto the 800 real
+  pixels.  If the circle is still a little oval, try 1.06 or 1.09 (a photo taken straight on, not at
+  an angle, measures it best:  aspect = width of circle / height of circle, along the long side).
+
+THREE TOUCH BUTTONS AT THE BOTTOM (needs the panel's touch layer)
+  button 1 = clock <-> Calendar (its label says where it goes: "कैलेण्डर" / "घड़ी"); the Calendar returns to the
+  clock after 5 minutes without a touch (idle_return_seconds in settings.yaml, default 300)
+  button 2 = "सेटअप" (Wi-Fi + location)       button 3 = "बन्द करें": touch once -> label "फिर दबाएँ" for 5 s,
+  touch again inside 5 s -> clean shutdown.   Default OFF (Pi 1 is not affected).
+       bash tools/set_display.sh touch-buttons on          (then restart the clock)
+       VEDICGHADI_TOUCH_BUTTONS=1 python3 ui/main_window_hi.py        quick try without saving
+  If touching does nothing:  xinput list     (is there a touch screen device?) and tell me what it prints.
+
+IF THE PICTURE IS SHIFTED OR TRIMMED
+  About 2.5 s after start the clock prints one more line, e.g.
+     [display] window 800 x 480 | screen 800 x 480 (full 800 x 480) | pixel ratio 1.00 | content 480 x 800 (page 1: 480 x 800, ...)
+  "content" must be 480 x 800.  Send me that line together with a photo.
+
+NOT DONE YET
+  Calendar page (button 2) is not checked in portrait: expect it to look wrong.
+  Portrait crop of the temple background (needs ui/background.py).
+  The old "rotate" option (desktop turns the screen) stays in set_display.sh, but it stretches
+  the picture on this Pi: use "app-rotate".

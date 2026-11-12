@@ -78,6 +78,7 @@ from page_vedic_dial_hi import PageVedicDialHi
 from page_vedic_dial_portrait_hi import PageVedicDialPortraitHi
 from page_calendar_hi import PageCalendarHi
 from touch_bar import TouchBar
+from touch_raw import connect_touch
 from rotated_host import RotatedHost, logical_size
 from scaling import px
 from translations_hi import get_devanagari_font_family
@@ -128,17 +129,20 @@ def pixel_aspect():
     return v or 1.0
 
 
-def touch_buttons_enabled():
-    """Show the three on-screen touch buttons at the bottom?  Default OFF (Pi 1 has none).
-    First valid answer wins:  environment variable VEDICGHADI_TOUCH_BUTTONS (1/0, on/off), then
-    the file ~/.config/vedicghadi/touch_buttons.txt (on | off; per device, outside git).
-    Set it with:  bash tools/set_display.sh touch-buttons on"""
+def touch_buttons_mode():
+    """"off" (default, Pi 1), "on" (the buttons react to ordinary mouse / touch clicks) or "raw"
+    (also read the Pi 2's USB touch chip directly, see ui/touch_raw.py).
+    First valid answer wins:  environment variable VEDICGHADI_TOUCH_BUTTONS, then the file
+    ~/.config/vedicghadi/touch_buttons.txt  (off | on | raw; per device, outside git).
+    Set it with:  bash tools/set_display.sh touch-buttons raw"""
     def norm(value):
         v = str(value or "").strip().lower()
         if v in ("1", "on", "yes", "true"):
-            return True
+            return "on"
         if v in ("0", "off", "no", "false"):
-            return False
+            return "off"
+        if v == "raw":
+            return "raw"
         return None
     v = norm(os.environ.get("VEDICGHADI_TOUCH_BUTTONS"))
     if v is not None:
@@ -149,7 +153,11 @@ def touch_buttons_enabled():
             v = norm(f.readline())
     except OSError:
         v = None
-    return bool(v)
+    return v or "off"
+
+
+def touch_buttons_enabled():
+    return touch_buttons_mode() != "off"
 
 
 def choose_layout(screen_size):
@@ -248,6 +256,11 @@ class MainWindowHi(QMainWindow):
             self.touch_bar.button3.connect(self.shutdown_button_pressed)
             for sig in (self.touch_bar.button1, self.touch_bar.button2, self.touch_bar.button3):
                 sig.connect(self._restart_idle)
+            # "raw": the desktop sees no touch from this panel's chip, so read the chip ourselves and
+            # turn its touches into clicks on the screen point (ui/touch_raw.py)
+            self.raw_touch = None
+            if touch_buttons_mode() == "raw":
+                self.raw_touch = connect_touch(phys_size.width(), phys_size.height())
         # the dial page has its own banner, so the plain banner row is hidden there
         self.stacked_widget.currentChanged.connect(self._on_page_changed)
         central.setLayout(main_layout)

@@ -18,16 +18,23 @@
 #                                              panels: circles come out as ovals).  1.076 = each pixel is
 #                                              7.6 % wider than tall; 1 = square.  Only used together with
 #                                              app-rotate.  Test first:  tools/screen_test.py --rotate 270 --aspect 1.076
-#   bash tools/set_display.sh touch-buttons on   show the 3 on-screen touch buttons at the bottom
-#                                              (clock <-> Calendar, Wi-Fi setup, shutdown); off = hide.
-#                                              Default off.  Needs a touch screen.
+#   bash tools/set_display.sh touch-buttons on|raw|off
+#                                              show the 3 on-screen touch buttons at the bottom
+#                                              (clock <-> Calendar, Wi-Fi setup, shutdown); off = hide (default).
+#                                              "on"  = react to ordinary mouse / touch clicks.
+#                                              "raw" = also read the Pi 2's USB touch chip (0eef:0005) directly;
+#                                                      needs  bash tools/install_touch_rule.sh  once.
+#   bash tools/set_display.sh touch-map flipx|flipy|swap|none
+#                                              direction fix for "raw" if a touch lands mirrored (words can be
+#                                              combined:  touch-map flipx flipy).  Test with tools/touch_test.py --raw
 #   then:  sudo reboot
 #
 # How it works:
 #   "rotate" writes ~/.config/vedicghadi/screen_rotation.txt, also read by apply_display_mode.sh.
 #   "app-rotate" writes ~/.config/vedicghadi/app_rotation.txt, read by ui/main_window_hi.py.
 #   "pixel-aspect" writes ~/.config/vedicghadi/pixel_aspect.txt, read by ui/main_window_hi.py.
-#   "touch-buttons" writes ~/.config/vedicghadi/touch_buttons.txt, read by ui/main_window_hi.py.
+#   "touch-buttons" writes ~/.config/vedicghadi/touch_buttons.txt, read by ui/main_window_hi.py;
+#   "touch-map" writes ~/.config/vedicghadi/touch_map.txt, read by ui/touch_raw.py.
 #   "auto" / "WxH" write ~/.config/vedicghadi/display_mode.txt, read by apply_display_mode.sh
 #          (hook in ~/.config/labwc/autostart, installed by tools/pi_display_fix.sh).
 #   "force" adds  video=<output>:WxH@60D  to /boot/firmware/cmdline.txt (needs sudo, keeps a backup
@@ -40,6 +47,7 @@ ROTATION_FILE="${VEDICGHADI_ROTATION_FILE:-$HOME/.config/vedicghadi/screen_rotat
 APP_ROTATION_FILE="${VEDICGHADI_APP_ROTATION_FILE:-$HOME/.config/vedicghadi/app_rotation.txt}"
 PIXEL_ASPECT_FILE="${VEDICGHADI_PIXEL_ASPECT_FILE:-$HOME/.config/vedicghadi/pixel_aspect.txt}"
 TOUCH_FILE="${VEDICGHADI_TOUCH_FILE:-$HOME/.config/vedicghadi/touch_buttons.txt}"
+TOUCH_MAP_FILE="${VEDICGHADI_TOUCH_MAP_FILE:-$HOME/.config/vedicghadi/touch_map.txt}"
 CMDLINE="${VEDICGHADI_CMDLINE:-/boot/firmware/cmdline.txt}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
@@ -78,6 +86,7 @@ case "$cmd" in
     echo "   app_rotation     : $( [ -f "$APP_ROTATION_FILE" ] && cat "$APP_ROTATION_FILE" || echo '(none = normal)')   (the clock turns its own picture)"
     echo "   pixel_aspect     : $( [ -f "$PIXEL_ASPECT_FILE" ] && cat "$PIXEL_ASPECT_FILE" || echo '(none = 1, square pixels)')"
     echo "   touch_buttons    : $( [ -f "$TOUCH_FILE" ] && cat "$TOUCH_FILE" || echo '(none = off)')"
+    echo "   touch_map        : $( [ -s "$TOUCH_MAP_FILE" ] && cat "$TOUCH_MAP_FILE" || echo '(none = straight)')"
     echo "   kernel video=    : $(grep -oE 'video=HDMI-A-[0-9]+:[^ ]*' "$CMDLINE" 2>/dev/null || echo '(none)')"
     ;;
   auto)
@@ -135,16 +144,26 @@ case "$cmd" in
   touch-buttons)
     want="${2:-}"
     case "$want" in
-      on|off) ;;
-      *) echo "usage: set_display.sh touch-buttons on|off"; exit 1 ;;
+      on|off|raw) ;;
+      *) echo "usage: set_display.sh touch-buttons on|raw|off"; exit 1 ;;
     esac
     mkdir -p "$(dirname "$TOUCH_FILE")"; echo "$want" > "$TOUCH_FILE"
     echo "touch_buttons.txt: $want   (read when the clock starts)"
     echo "done -- restart the clock (or: sudo reboot)."
     ;;
+  touch-map)
+    shift
+    words="$*"
+    [ "$words" = "none" ] && words=""
+    for wd in $words; do
+      case "$wd" in flipx|flipy|swap) ;; *) echo "usage: set_display.sh touch-map flipx|flipy|swap [more words] | none"; exit 1 ;; esac
+    done
+    mkdir -p "$(dirname "$TOUCH_MAP_FILE")"; echo "$words" > "$TOUCH_MAP_FILE"
+    echo "touch_map.txt: ${words:-(straight)}   (read when the clock starts)"
+    ;;
   *)
     want="$cmd"
-    [[ "$want" =~ ^[0-9]+x[0-9]+$ ]] || { echo "usage: set_display.sh show | auto | WxH | force WxH | rotate N|90|180|270 | app-rotate N|90|180|270 | pixel-aspect 1.076 | touch-buttons on|off"; exit 1; }
+    [[ "$want" =~ ^[0-9]+x[0-9]+$ ]] || { echo "usage: set_display.sh show | auto | WxH | force WxH | rotate N|90|180|270 | app-rotate N|90|180|270 | pixel-aspect 1.076 | touch-buttons on|raw|off | touch-map flipx|flipy|swap|none"; exit 1; }
     if ! printf '%s\n' "$LIST" | awk '/px/ {print $1}' | grep -qx "$want"; then
       echo "ERROR: this screen does not offer $want. Offered sizes:"
       printf '%s\n' "$LIST" | awk '/px/ {print "   " $1}' | sort -u
