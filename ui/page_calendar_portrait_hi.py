@@ -11,6 +11,8 @@ for a narrow tall screen: 7 columns of about 64 px.  Every day cell is painted d
     |पूजा    |
     +--------+
 
+  * TRANSPOSED = True (default): the weekdays run DOWN the left side (7 rows) and the weeks run across
+    (5 or 6 columns), so every cell is about 14 % wider than with 7 columns; False = the usual layout
   * today = orange cell, a day with a festival = lighter maroon
   * the page re-reads the date every time it is shown (the old page drew the month once at start)
   * the bottom `reserve_bottom` px stay empty: the touch buttons are drawn over them
@@ -45,6 +47,9 @@ MARGIN = 6
 GAP = 3
 TITLE_H = 66
 HEAD_H = 26
+LABEL_W = 22          # width of the weekday labels (turned sideways) in the transposed layout
+TRANSPOSED = True     # weekdays down the left, weeks across (wider cells); False = weekdays across the top
+REF_W = 64.3          # cell width the text sizes were chosen for; wider cells grow the text up to 12 %
 
 
 def _font(family, px, bold=False):
@@ -83,18 +88,19 @@ class DayCell(QWidget):
         p.setBrush(bg)
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(0, 0, w, h), 5, 5)
-        pad = max(3, w * 0.05)
+        k = min(1.12, max(1.0, w / REF_W))          # text grows a little in wider cells
+        pad = max(3, REF_W * 0.05 * k)
         inner = w - 2 * pad
         y = 2.0
         # day number
-        nf = _font(self.family, w * 0.40, True)
+        nf = _font(self.family, REF_W * 0.40 * k, True)
         p.setFont(nf)
         p.setPen(fg)
         p.drawText(QRectF(pad, y, inner, nf.pixelSize() * LINE_H), Qt.AlignLeft | Qt.AlignTop, self.day)
         y += nf.pixelSize() * LINE_H
         # second line: paksha letters + tithi, side by side (both shrink together if the line is too wide)
         if self.tithi:
-            t_px = max(6, int(w * 0.21))
+            t_px = max(6, int(REF_W * 0.21 * k))
             while True:
                 tf = _font(self.family, t_px)
                 pf = _font(self.family, max(6, round(t_px * 0.85)), True)
@@ -116,7 +122,7 @@ class DayCell(QWidget):
             y += tf.pixelSize() * LINE_H + 1
         # festivals: wrapped, as many lines as fit
         if self.festivals:
-            ff = _font(self.family, w * 0.19, True)
+            ff = _font(self.family, REF_W * 0.19 * k, True)
             lines = []
             for name in self.festivals:
                 lines += wrap_words(ff, name, inner)
@@ -124,7 +130,10 @@ class DayCell(QWidget):
             fit = max(1, int((h - y - 2) // line_h))
             if len(lines) > fit:
                 lines = lines[:fit]
-                lines[-1] = lines[-1].rstrip() + " …"
+                # the last visible line ends in "…" and is cut so that it still fits the cell
+                lines[-1] = QFontMetrics(ff).elidedText(lines[-1].rstrip() + " …", Qt.ElideRight, int(inner))
+                if not lines[-1].endswith("…"):
+                    lines[-1] = lines[-1][:-1] + "…"
             p.setFont(ff)
             p.setPen(fest)
             for line in lines:
@@ -186,15 +195,26 @@ class PageCalendarPortraitHi(PageCalendarHi):
         W, H = self.width(), self.height()
         if W < 50 or H < 50:
             return
-        self._grid_top = MARGIN + TITLE_H + 4 + HEAD_H + 3
-        grid_h = H - self.reserve_bottom - MARGIN - self._grid_top
-        rows = max(1, self._weeks)
-        cw = (W - 2 * MARGIN - 6 * GAP) / 7.0
-        ch = min(140.0, (grid_h - (rows - 1) * GAP) / rows)
-        self._cw = cw
-        for cell, r, c in self._cells:
-            cell.setGeometry(int(round(MARGIN + c * (cw + GAP))), int(round(self._grid_top + r * (ch + GAP))),
-                             int(round(cw)), int(round(ch)))
+        weeks = max(1, self._weeks)
+        if TRANSPOSED:
+            self._top = MARGIN + TITLE_H + 4
+            left = MARGIN + LABEL_W + GAP
+            grid_h = H - self.reserve_bottom - MARGIN - self._top
+            cw = (W - MARGIN - left - (weeks - 1) * GAP) / float(weeks)
+            ch = min(150.0, (grid_h - 6 * GAP) / 7.0)
+            self._left, self._cw, self._ch = left, cw, ch
+            for cell, r, c in self._cells:          # r = week (column), c = weekday (row)
+                cell.setGeometry(int(round(left + r * (cw + GAP))), int(round(self._top + c * (ch + GAP))),
+                                 int(round(cw)), int(round(ch)))
+        else:
+            self._top = MARGIN + TITLE_H + 4 + HEAD_H + 3
+            grid_h = H - self.reserve_bottom - MARGIN - self._top
+            cw = (W - 2 * MARGIN - 6 * GAP) / 7.0
+            ch = min(140.0, (grid_h - (weeks - 1) * GAP) / weeks)
+            self._left, self._cw, self._ch = MARGIN, cw, ch
+            for cell, r, c in self._cells:
+                cell.setGeometry(int(round(MARGIN + c * (cw + GAP))), int(round(self._top + r * (ch + GAP))),
+                                 int(round(cw)), int(round(ch)))
 
     def resizeEvent(self, event):
         self._layout()
@@ -226,12 +246,22 @@ class PageCalendarPortraitHi(PageCalendarHi):
         p.setFont(f2)
         p.drawText(QRectF(MARGIN, MARGIN + 3 + f1.pixelSize() * LINE_H - 2, W - 2 * MARGIN, f2.pixelSize() * LINE_H),
                    Qt.AlignHCenter | Qt.AlignTop, self._title2)
-        # weekday header
-        cw = (W - 2 * MARGIN - 6 * GAP) / 7.0
+        names = [translate_weekday_short(n) for n in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]]
         hf = _font(self.font_family, 16, True)
         p.setFont(hf)
         p.setPen(C_HEAD)
-        top = MARGIN + TITLE_H + 4
-        for i, name in enumerate(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]):
-            p.drawText(QRectF(MARGIN + i * (cw + GAP), top, cw, HEAD_H), Qt.AlignCenter, translate_weekday_short(name))
+        if TRANSPOSED:
+            # weekday names turned sideways, one per row, in the narrow column at the left
+            for i, name in enumerate(names):
+                cy = self._top + i * (self._ch + GAP) + self._ch / 2.0
+                p.save()
+                p.translate(MARGIN + LABEL_W / 2.0, cy)
+                p.rotate(-90)
+                p.drawText(QRectF(-self._ch / 2.0, -LABEL_W / 2.0, self._ch, LABEL_W), Qt.AlignCenter, name)
+                p.restore()
+        else:
+            cw = (W - 2 * MARGIN - 6 * GAP) / 7.0
+            top = MARGIN + TITLE_H + 4
+            for i, name in enumerate(names):
+                p.drawText(QRectF(MARGIN + i * (cw + GAP), top, cw, HEAD_H), Qt.AlignCenter, name)
         p.end()
