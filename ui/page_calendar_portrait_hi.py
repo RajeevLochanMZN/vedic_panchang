@@ -11,8 +11,13 @@ for a narrow tall screen: 7 columns of about 64 px.  Every day cell is painted d
     |पूजा    |
     +--------+
 
-  * TRANSPOSED = True (default): the weekdays run DOWN the left side (7 rows) and the weeks run across
-    (5 or 6 columns), so every cell is about 14 % wider than with 7 columns; False = the usual layout
+  * TRANSPOSED = True (default): the weekdays run DOWN the left side (7 rows, names horizontal) and the
+    weeks run across (at most 5 columns), so every cell is much wider than with 7 columns;
+    False = the usual layout with the weekdays across the top
+  * ALWAYS AT MOST 5 WEEKS, like the printed Indian calendars: when a month needs a 6th week, its days
+    (the 30th, 31st) are written in the EMPTY cells of the first week (they always fall on exactly those
+    weekdays) and drawn with a dashed gold edge, so they are easy to tell apart
+  * WEEK_STARTS_SUNDAY = True: रवि is the first day (as on Indian calendars); False = सोम first
   * today = orange cell, a day with a festival = lighter maroon
   * the page re-reads the date every time it is shown (the old page drew the month once at start)
   * the bottom `reserve_bottom` px stay empty: the touch buttons are drawn over them
@@ -47,7 +52,8 @@ MARGIN = 6
 GAP = 3
 TITLE_H = 66
 HEAD_H = 26
-LABEL_W = 22          # width of the weekday labels (turned sideways) in the transposed layout
+LABEL_W = 38          # width of the weekday names (horizontal) in the transposed layout
+WEEK_STARTS_SUNDAY = True   # Indian calendars start the week with रविवार; False = Monday first
 TRANSPOSED = True     # weekdays down the left, weeks across (wider cells); False = weekdays across the top
 REF_W = 64.3          # cell width the text sizes were chosen for; wider cells grow the text up to 12 %
 
@@ -68,11 +74,12 @@ class DayCell(QWidget):
         self.tithi = ""
         self.festivals = []
         self.today = False
+        self.folded = False           # a 6th-week day written in the first week's empty cell
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
 
-    def set_data(self, day, paksha, tithi, festivals, today):
+    def set_data(self, day, paksha, tithi, festivals, today, folded=False):
         self.day, self.paksha, self.tithi = str(day), paksha, tithi
-        self.festivals, self.today = festivals, today
+        self.festivals, self.today, self.folded = festivals, today, folded
         self.update()
 
     def paintEvent(self, event):
@@ -88,6 +95,11 @@ class DayCell(QWidget):
         p.setBrush(bg)
         p.setPen(Qt.NoPen)
         p.drawRoundedRect(QRectF(0, 0, w, h), 5, 5)
+        if self.folded:
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QPen(C_DARK if self.today else C_FEST_TEXT, 1.4, Qt.DashLine))
+            p.drawRoundedRect(QRectF(1.5, 1.5, w - 3, h - 3), 4, 4)
+            p.setPen(Qt.NoPen)
         k = min(1.12, max(1.0, w / REF_W))          # text grows a little in wider cells
         pad = max(3, REF_W * 0.05 * k)
         inner = w - 2 * pad
@@ -163,9 +175,10 @@ class PageCalendarPortraitHi(PageCalendarHi):
             return
         self._key = key
         month_hi = translate_month(now_ist.strftime("%B"))
-        weeks = calendar.monthcalendar(now_ist.year, now_ist.month)
-        self._weeks = len(weeks)
-        first, last = [d for w in weeks for d in w if d][0], [d for w in weeks for d in w if d][-1]
+        cal = calendar.Calendar(firstweekday=6 if WEEK_STARTS_SUNDAY else 0)
+        weeks = cal.monthdayscalendar(now_ist.year, now_ist.month)
+        days_in_month = [d for w in weeks for d in w if d]
+        first, last = days_in_month[0], days_in_month[-1]
         sr_first = get_sunrise_jd(get_local_midnight_jd_ut(datetime(now_ist.year, now_ist.month, first)), self.lat, self.lon)
         sr_last = get_sunrise_jd(get_local_midnight_jd_ut(datetime(now_ist.year, now_ist.month, last)), self.lat, self.lon)
         m1, m2 = get_purnimanta_masa_name(sr_first), get_purnimanta_masa_name(sr_last)
@@ -174,19 +187,28 @@ class PageCalendarPortraitHi(PageCalendarHi):
         self._title1 = "%s %s" % (month_hi, now_ist.year)
         self._title2 = "%s: %s    %s" % (HEADINGS_HI["vikram_samvat"], get_vikram_samvat_year(sr_first), masa)
 
-        for cell, _r, _c in self._cells:
-            cell.deleteLater()
-        self._cells = []
+        # at most 5 weeks: the 6th week's days go into the first week's empty cells (same weekday)
+        placed = []                                   # (day, week index, weekday index, folded)
         for r, week in enumerate(weeks):
             for c, day in enumerate(week):
                 if not day:
                     continue
-                s = get_day_panchang_summary_hi(datetime(now_ist.year, now_ist.month, day), self.lat, self.lon)
-                paksha = "शु" if "शुक्ल" in s["paksha_hi"] else "कृ"
-                cell = DayCell(self.font_family, self)
-                cell.set_data(day, paksha, s["tithi_name_hi"], s["festivals_hi"], day == now_ist.day)
-                cell.show()
-                self._cells.append((cell, r, c))
+                if r == 5 and weeks[0][c] == 0:
+                    placed.append((day, 0, c, True))
+                else:
+                    placed.append((day, r, c, False))
+        self._weeks = max(r for _d, r, _c, _f in placed) + 1
+
+        for cell, _r, _c in self._cells:
+            cell.deleteLater()
+        self._cells = []
+        for day, r, c, folded in placed:
+            s = get_day_panchang_summary_hi(datetime(now_ist.year, now_ist.month, day), self.lat, self.lon)
+            paksha = "शु" if "शुक्ल" in s["paksha_hi"] else "कृ"
+            cell = DayCell(self.font_family, self)
+            cell.set_data(day, paksha, s["tithi_name_hi"], s["festivals_hi"], day == now_ist.day, folded)
+            cell.show()
+            self._cells.append((cell, r, c))
         self._layout()
         self.update()
 
@@ -246,19 +268,19 @@ class PageCalendarPortraitHi(PageCalendarHi):
         p.setFont(f2)
         p.drawText(QRectF(MARGIN, MARGIN + 3 + f1.pixelSize() * LINE_H - 2, W - 2 * MARGIN, f2.pixelSize() * LINE_H),
                    Qt.AlignHCenter | Qt.AlignTop, self._title2)
-        names = [translate_weekday_short(n) for n in ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]]
-        hf = _font(self.font_family, 16, True)
+        order = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] if WEEK_STARTS_SUNDAY else \
+                ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+        names = [translate_weekday_short(n) for n in order]
+        hf = _font(self.font_family, 15, True)
         p.setFont(hf)
         p.setPen(C_HEAD)
         if TRANSPOSED:
-            # weekday names turned sideways, one per row, in the narrow column at the left
+            # weekday names, horizontal, one per row, in the column at the left
             for i, name in enumerate(names):
-                cy = self._top + i * (self._ch + GAP) + self._ch / 2.0
-                p.save()
-                p.translate(MARGIN + LABEL_W / 2.0, cy)
-                p.rotate(-90)
-                p.drawText(QRectF(-self._ch / 2.0, -LABEL_W / 2.0, self._ch, LABEL_W), Qt.AlignCenter, name)
-                p.restore()
+                top = self._top + i * (self._ch + GAP)
+                fit = fit_font(hf, name, LABEL_W - 2)
+                p.setFont(fit)
+                p.drawText(QRectF(MARGIN, top, LABEL_W, self._ch), Qt.AlignCenter, name)
         else:
             cw = (W - 2 * MARGIN - 6 * GAP) / 7.0
             top = MARGIN + TITLE_H + 4
