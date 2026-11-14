@@ -1,20 +1,24 @@
 """
-engine/festival_span.py  --  festivals shown on EVERY date their tithi covers.
+engine/festival_span.py  --  ONE date per festival: the day on which its tithi covers
+the most hours of DAYTIME (sunrise to sunset).
 
-Decision (Pi clock): whenever a festival's tithi falls on two calendar dates, show
-BOTH dates ("8/9 नवम्बर") and let people decide which day to celebrate.  So the
-engine no longer has to choose one day (the vyapti scoring and tie-break in
-festival_vyapti.py are NOT used by this module).
+Decision (Pi clock, 12 Nov 2026): a tithi usually touches two calendar dates, sometimes
+three ("14/15/16"), but often one of them has almost no daytime (the tithi starts after
+sunset or ends before sunrise).  The festival is shown on the date where the tithi is
+present for the LONGEST part of the daytime.  (Before: every date the tithi touched.)
+The vyapti scoring and tie-break in festival_vyapti.py are still NOT used by this module.
 
 THE RULE
   * Every tithi that prevails at any moment of a calendar day (IST) is looked at.
     Its lunar month is checked (Adhik / Kshaya months are skipped, as before).
-  * A festival with that tithi and month is ON that day.  Its dates are every
-    calendar date from the date the tithi starts to the date it ends
-    (usually two: "8/9").  It stays on the card on all of those dates.
-  * tithi_and_weekday festivals (Somavati / Shani Amavasya): on the date inside
-    the tithi's span whose weekday matches.
-  * Holi = the day after each Holika Dahan date ("2/3" -> "3/4").
+  * A festival with that tithi and month is held on ONE date: of the calendar dates the
+    tithi touches, the one with the most hours between sunrise and sunset inside the tithi.
+    Equal hours (within a minute): the earlier date.  A tithi that covers no daytime at all
+    (it lies wholly in a night): the date on which it starts.
+  * The festival is ON that date only (active_on(festivals, k) lists it for that k alone).
+  * tithi_and_weekday festivals (Somavati / Shani Amavasya): unchanged - on the date inside
+    the tithi's WHOLE span whose weekday matches.
+  * Holi = the day after the Holika Dahan date.
   * eclipse_shift(day_index) (optional): moves a date that has a visible eclipse.
   * Sankranti festivals are not handled here (festivals.py keeps doing them).
 
@@ -52,6 +56,7 @@ class SpanResolver:
         self.shift = eclipse_shift or (lambda k: k)
         self._base = self._local_day(adapter.sun_times(0)[0])
         self._occ = {}
+        self._sun = {}
 
     def _local_day(self, jd):
         return math.floor(jd + 0.5 + self.tz / 24.0)
@@ -81,26 +86,51 @@ class SpanResolver:
         self._occ[k] = out
         return out
 
-    def _dates(self, s, e):
+    def _all_dates(self, s, e):
+        """Every calendar date (day index) the tithi touches, from its start to its end."""
         d0, d1 = self.day_index(s), self.day_index(e)
-        return sorted({self.shift(d) for d in range(d0, d1 + 1)})
+        return list(range(d0, d1 + 1))
+
+    def _sun_of(self, k):
+        if k not in self._sun:
+            self._sun[k] = self.a.sun_times(k)
+        return self._sun[k]
+
+    def _daytime_hours(self, k, s, e):
+        """Hours between sunrise and sunset of day k that lie inside the tithi [s, e]."""
+        sr, ss = self._sun_of(k)
+        return max(0.0, (min(e, ss) - max(s, sr)) * 24.0)
+
+    def _dates(self, s, e):
+        """The ONE date the festival is held on: the day the tithi covers the most daytime."""
+        days = self._all_dates(s, e)
+        hours = {d: self._daytime_hours(d, s, e) for d in days}
+        best = max(hours.values())
+        if best <= 0.0:                                   # no daytime at all: the tithi's own start date
+            chosen = days[0]
+        else:
+            chosen = next(d for d in days if hours[d] >= best - 1.0 / 60.0)    # ties (< 1 min): earlier
+        return [self.shift(chosen)]
 
     def active_on(self, festivals, k=0):
-        """Festivals ON calendar day k: list of
-        {"festival": f, "tithi_days": [day indexes], "span": (start_jd, end_jd)}."""
+        """Festivals held ON calendar day k: list of
+        {"festival": f, "tithi_days": [day index], "span": (start_jd, end_jd)}."""
         out = []
         for t, s, e, month in self.occurrences(k):
-            days = self._dates(s, e)
+            days = self._dates(s, e)                       # one date
+            whole = None                                   # all dates of the tithi (weekday rule)
             for f in festivals:
                 rule = f.get("rule")
                 if rule == "tithi_at_sunrise" and f["name"] != "Holi":
-                    if f["tithi"] == t and f["lunar_month"] == month:
+                    if f["tithi"] == t and f["lunar_month"] == month and k in days:
                         out.append({"festival": f, "tithi_days": days, "span": (s, e)})
                 elif rule == "tithi_and_weekday" and f["tithi"] == t:
-                    wd = [d for d in days if self.a.weekday_of(d) == f["vara"] and d == k]
+                    if whole is None:
+                        whole = sorted({self.shift(d) for d in self._all_dates(s, e)})
+                    wd = [d for d in whole if self.a.weekday_of(d) == f["vara"] and d == k]
                     if wd:
                         out.append({"festival": f, "tithi_days": wd, "span": (s, e)})
-        # Holi: the day after Holika Dahan (every Holika Dahan date + 1)
+        # Holi: the day after Holika Dahan
         holi = next((f for f in festivals if f["name"] == "Holi"), None)
         if holi:
             for e in self.active_on_no_holi(festivals, k - 1):
@@ -113,10 +143,11 @@ class SpanResolver:
     def active_on_no_holi(self, festivals, k):
         out = []
         for t, s, e, month in self.occurrences(k):
+            days = self._dates(s, e)
             for f in festivals:
                 if f.get("rule") == "tithi_at_sunrise" and f["name"] == "Holika Dahan" \
-                        and f["tithi"] == t and f["lunar_month"] == month:
-                    out.append({"festival": f, "tithi_days": self._dates(s, e), "span": (s, e)})
+                        and f["tithi"] == t and f["lunar_month"] == month and k in days:
+                    out.append({"festival": f, "tithi_days": days, "span": (s, e)})
         return out
 
 
@@ -124,9 +155,9 @@ def card_pages(resolver, festivals, base_date, name_hi=lambda n: n,
                months_hi=MONTHS_HI, days_ahead=2, max_next=2, max_pages=4):
     """Pages (line1, line2) for the festival corner card; [] = swastik.  At most
     max_pages pages (today's first, so "अगला पर्व" pages are the first to be dropped).
-      today's festivals:  ("आज का पर्व : दीपावली", "8/9 नवम्बर")   (dates only if 2+)
-      then festivals that BEGIN within days_ahead days and are not on today:
-                          ("अगला पर्व : गोवर्धन पूजा", "10/11 नवम्बर")"""
+      today's festivals:  ("आज का पर्व : दीपावली", "")           (one date: no dates line)
+      then festivals held within days_ahead days and not today:
+                          ("अगला पर्व : गोवर्धन पूजा", "10 नवम्बर")"""
     def page(label, e, force_date=None):
         days = e["tithi_days"]
         dates = days if len(days) > 1 else ([force_date] if force_date is not None else [])
