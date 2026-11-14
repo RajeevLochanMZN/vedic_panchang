@@ -1,98 +1,46 @@
 """
-tests/test_festival_vyapti.py -- checks engine/festival_vyapti.py with an
-independent astronomical adapter built on pyswisseph alone (built-in Moshier
-ephemeris, no ephe files needed), so it runs on any PC:
+tests/test_festival_vyapti.py -- a LISTING TOOL for the festival rules (it asserts nothing; the
+pytest tests of the new rule are in tests/test_festival_span.py).  It uses the independent sky of
+tests/swiss_sky.py (pyswisseph, Moshier ephemeris, no ephe files), so it runs on any PC:
 
     pip install pyswisseph pyyaml
-    python tests/test_festival_vyapti.py              # print every festival Oct 2026 - Mar 2027
-    python tests/test_festival_vyapti.py 2026-10-20 2026-11-15
+    python tests/test_festival_vyapti.py                         # festivals Oct 2026 - Mar 2027, NEW rule (festival_span)
+    python tests/test_festival_vyapti.py 2026-10-20 2026-11-15   # the same for another range
+    python tests/test_festival_vyapti.py --year 2026             # whole year, NEW rule
+    python tests/test_festival_vyapti.py --cards 2026-11-06 2026-11-12   # festival card pages per day
+    python tests/test_festival_vyapti.py --old                   # the OLD vyapti rule (festival_vyapti), with "TIE a/b"
+    python tests/test_festival_vyapti.py --selftest              # asserts for the OLD vyapti rule only
 
-It prints the date the rule gives for each tithi-based festival (and "TIE a/b"
-when two days tied).  Compare with a reference calendar (e.g. Drik Panchang).
+Compare the dates with a reference calendar (e.g. Drik Panchang).
 """
 import os
 import sys
 from datetime import date, datetime, timedelta
 
-import swisseph as swe
 import yaml
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "engine"))
 from festival_vyapti import FestivalDayResolver, festivals_held_on  # noqa: E402
 
-LAT, LON = 29.4667, 77.7333          # Muzaffarnagar
-IST = 5.5 / 24.0
-FLAGS = swe.FLG_MOSEPH
-
-
-def _lon(body, jd, sid=False):
-    f = FLAGS | (swe.FLG_SIDEREAL if sid else 0)
-    return swe.calc_ut(jd, body, f)[0][0]
-
-
-def _elong(jd):
-    return (_lon(swe.MOON, jd) - _lon(swe.SUN, jd)) % 360.0
-
-
-class SwissAdapter:
-    def __init__(self, base_date):
-        swe.set_sid_mode(swe.SIDM_LAHIRI)
-        self.base = base_date
-        self._nm = {}
-
-    def tithi_at(self, jd):
-        return int(_elong(jd) // 12.0) + 1
-
-    # -- amanta month via the new moon that starts the lunar month
-    def _newmoon_near(self, jd):
-        for _ in range(8):
-            e = _elong(jd)
-            e = e - 360.0 if e > 180.0 else e
-            jd -= e / 12.19
-        return jd
-
-    def month_at(self, jd):
-        e = _elong(jd)
-        start = self._newmoon_near(jd - e / 12.19)
-        end = self._newmoon_near(start + 29.53)
-        r0 = int(_lon(swe.SUN, start, True) // 30.0)
-        r1 = int(_lon(swe.SUN, end, True) // 30.0)
-        if r0 == r1:
-            return 0                      # Adhik month: festivals skipped
-        return (r0 + 1) % 12 + 1
-
-    def _midnight(self, k):
-        d = self.base + timedelta(days=k)
-        return swe.julday(d.year, d.month, d.day, 0.0) - IST
-
-    def _rise_set(self, body, jd0, rise):
-        flag = swe.CALC_RISE if rise else swe.CALC_SET
-        res, tret = swe.rise_trans(jd0, body, flag, (LON, LAT, 200.0), 1013.25, 15.0, FLAGS)
-        return tret[0] if res == 0 else None
-
-    def sun_times(self, k):
-        j0 = self._midnight(k)
-        sr = self._rise_set(swe.SUN, j0, True)
-        ss = self._rise_set(swe.SUN, sr, False)
-        return sr, ss
-
-    def weekday_of(self, k):
-        names = ["Somvar", "Mangalvar", "Budhvar", "Guruvar", "Shukravar", "Shanivar", "Ravivar"]
-        return names[(self.base + timedelta(days=k)).weekday()]
-
-    def moonrise_jd(self, k):
-        j0 = self._midnight(k)
-        r = self._rise_set(swe.MOON, j0, True)
-        return r if r and r < j0 + 1.0 else None
-
-
-def to_ist_date(jd):
-    y, m, d, h = swe.revjul(jd + IST)
-    return date(y, m, d)
+from swiss_sky import LAT, LON, IST, SwissAdapter, to_ist_date  # noqa: E402,F401
 
 
 def run(start, end):
+    """NEW rule (festival_span): one row per festival, on the one date it is held."""
+    from festival_span import SpanResolver
+    with open(os.path.join(HERE, "..", "config", "festivals.yaml"), encoding="utf-8") as f:
+        festivals = yaml.safe_load(f)["festivals"]
+    rows = []
+    d = start
+    while d <= end:
+        for e in SpanResolver(SwissAdapter(d)).active_on(festivals, 0):
+            rows.append((d, e["festival"]["name"], ""))
+        d += timedelta(days=1)
+    return rows
+
+
+def run_old(start, end):
     with open(os.path.join(HERE, "..", "config", "festivals.yaml"), encoding="utf-8") as f:
         festivals = yaml.safe_load(f)["festivals"]
     d = start
@@ -192,7 +140,8 @@ if __name__ == "__main__":
     if "--selftest" in sys.argv:
         selftest()
         sys.exit(0)
-    a = date(2026, 10, 1) if len(sys.argv) < 3 else date.fromisoformat(sys.argv[1])
-    b = date(2027, 3, 31) if len(sys.argv) < 3 else date.fromisoformat(sys.argv[2])
-    for d, name, tie in run(a, b):
+    args = [x for x in sys.argv[1:] if x != "--old"]
+    a = date(2026, 10, 1) if len(args) < 2 else date.fromisoformat(args[0])
+    b = date(2027, 3, 31) if len(args) < 2 else date.fromisoformat(args[1])
+    for d, name, tie in (run_old if "--old" in sys.argv else run)(a, b):
         print(d.isoformat(), d.strftime("%a"), name, tie)
