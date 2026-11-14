@@ -57,6 +57,7 @@ class SpanResolver:
         self._base = self._local_day(adapter.sun_times(0)[0])
         self._occ = {}
         self._sun = {}
+        self._spans = []              # tithi periods already worked out: (tithi, start_jd, end_jd, month)
 
     def _local_day(self, jd):
         return math.floor(jd + 0.5 + self.tz / 24.0)
@@ -81,8 +82,12 @@ class SpanResolver:
             if t in seen:
                 continue
             seen.add(t)
-            s, e = tithi_span(self.a, jd)
-            out.append((t, s, e, self.a.month_at((s + e) / 2.0)))
+            occ = next((o for o in self._spans if o[0] == t and o[1] <= jd <= o[2]), None)
+            if occ is None:                                  # a tithi touches 2-3 days: work it out once
+                s, e = tithi_span(self.a, jd)
+                occ = (t, s, e, self.a.month_at((s + e) / 2.0))
+                self._spans.append(occ)
+            out.append(occ)
         self._occ[k] = out
         return out
 

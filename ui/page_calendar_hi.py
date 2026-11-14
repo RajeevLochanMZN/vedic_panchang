@@ -39,6 +39,7 @@ from ephemeris import init_ephemeris, datetime_to_julday
 from panchang import get_tithi_number, get_tithi_name_and_paksha
 from sun_times import get_local_midnight_jd_ut, get_sunrise_jd
 from festivals import get_todays_festivals
+from calendar_festivals import for_month
 from config_loader import get_location
 from scaling import px
 from masa import get_purnimanta_masa_name, get_vikram_samvat_year
@@ -51,7 +52,7 @@ from translations_hi import (
 IST_OFFSET = timedelta(hours=5, minutes=30)
 
 
-def get_day_panchang_summary_hi(day_dt_ist: datetime, lat: float, lon: float) -> dict:
+def get_day_panchang_summary_hi(day_dt_ist: datetime, lat: float, lon: float, month_festivals=None) -> dict:
     """
     Same computation as page_calendar.py's get_day_panchang_summary(),
     plus Hindi translation of the display strings. Kept as a separate
@@ -65,8 +66,14 @@ def get_day_panchang_summary_hi(day_dt_ist: datetime, lat: float, lon: float) ->
     tithi_number = get_tithi_number(sunrise_jd)
     tithi_name, paksha = get_tithi_name_and_paksha(tithi_number)
 
-    festivals = get_todays_festivals(sunrise_jd, sunrise_jd - 1.0)
-    festival_names = [f["name"] for f in festivals]
+    if month_festivals is not None:
+        # same rule as the dial card: ONE date per festival, the day its tithi covers the most
+        # daytime (engine/calendar_festivals.py); month_festivals is built once per month
+        festival_names = month_festivals.names_on(day_dt_ist.date())
+    else:
+        # fallback: the old rule (tithi at sunrise)
+        festivals = get_todays_festivals(sunrise_jd, sunrise_jd - 1.0)
+        festival_names = [f["name"] for f in festivals]
 
     return {
         "paksha_hi": translate_value("paksha", paksha),
@@ -174,6 +181,9 @@ class PageCalendarHi(QWidget):
         vikram_year = get_vikram_samvat_year(first_sunrise_jd)
         self.samvat_label.setText(f"{HEADINGS_HI['vikram_samvat']}: {vikram_year}")
 
+        # festivals of the whole month by the dial card's rule (None -> old per-day rule)
+        month_fest = for_month(now_ist.year, now_ist.month, self.lat, self.lon)
+
         grid = QGridLayout()
         grid.setSpacing(px(3))
 
@@ -190,7 +200,7 @@ class PageCalendarHi(QWidget):
                     continue
 
                 day_dt = datetime(now_ist.year, now_ist.month, day_num)
-                summary = get_day_panchang_summary_hi(day_dt, self.lat, self.lon)
+                summary = get_day_panchang_summary_hi(day_dt, self.lat, self.lon, month_fest)
 
                 is_today = (day_num == today_day)
                 has_festival = summary["has_festival"]

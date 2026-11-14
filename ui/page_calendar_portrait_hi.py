@@ -31,6 +31,7 @@ from PyQt5.QtGui import QPainter, QColor, QFont, QFontMetrics, QPen
 from PyQt5.QtWidgets import QWidget
 
 from page_calendar_hi import PageCalendarHi, get_day_panchang_summary_hi, IST_OFFSET
+from calendar_festivals import for_month
 from masa import get_purnimanta_masa_name, get_vikram_samvat_year
 from sun_times import get_local_midnight_jd_ut, get_sunrise_jd
 from config_loader import get_location
@@ -202,8 +203,9 @@ class PageCalendarPortraitHi(PageCalendarHi):
         for cell, _r, _c in self._cells:
             cell.deleteLater()
         self._cells = []
+        month_fest = for_month(now_ist.year, now_ist.month, self.lat, self.lon)   # None -> old rule
         for day, r, c, folded in placed:
-            s = get_day_panchang_summary_hi(datetime(now_ist.year, now_ist.month, day), self.lat, self.lon)
+            s = get_day_panchang_summary_hi(datetime(now_ist.year, now_ist.month, day), self.lat, self.lon, month_fest)
             paksha = "शु" if "शुक्ल" in s["paksha_hi"] else "कृ"
             cell = DayCell(self.font_family, self)
             cell.set_data(day, paksha, s["tithi_name_hi"], s["festivals_hi"], day == now_ist.day, folded)
