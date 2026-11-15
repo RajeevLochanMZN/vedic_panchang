@@ -40,6 +40,9 @@ and still needed -- hardware/buttons.py's ButtonController will call
 it (via whatever callbacks main_window_hi.py wires up) exactly the
 same way the old on-screen buttons did.
 
+SETUP CARD: settings.yaml  setup_show_password: true | dots | false  decides whether the hotspot password
+  is shown on the card (see ui/setup_card_text.py).
+
 KIOSK BEHAVIOUR (added together with setup.sh / launch.sh):
   - Starts in real FULLSCREEN (no title bar, covers the desktop taskbar).
     For development set VEDICGHADI_WINDOWED=1 to get a normal window
@@ -81,6 +84,7 @@ from page_calendar_hi import PageCalendarHi
 from page_calendar_portrait_hi import PageCalendarPortraitHi
 from touch_bar import TouchBar, BAR_HEIGHT
 from popup_card import PopupCard, C_RED
+from setup_card_text import password_mode, setup_steps
 import wifi_setup as wifi_setup_module
 from touch_raw import connect_touch
 from rotated_host import RotatedHost, logical_size
@@ -377,6 +381,10 @@ class MainWindowHi(QMainWindow):
         # IDLE RETURN: on any page except Home, no button press for idle_return_seconds
         # -> back to Home.  Every button press restarts the countdown.
         self.idle_seconds = int(load_settings().get("idle_return_seconds", 300))
+
+        # SETUP CARD: show / hide the hotspot password on it (settings.yaml setup_show_password:
+        # true | dots | false -- see ui/setup_card_text.py).  Read once, at start.
+        self.setup_password_mode = password_mode(load_settings().get("setup_show_password", True))
         self.idle_timer = QTimer(self)
         self.idle_timer.setSingleShot(True)
         self.idle_timer.timeout.connect(lambda: self.go_to_page(1))
@@ -460,14 +468,10 @@ class MainWindowHi(QMainWindow):
 
     def _setup_steps(self):
         ssid = getattr(wifi_setup_module, "HOTSPOT_SSID", "VedicGhadi-Setup")
-        url = getattr(wifi_setup_module, "SETUP_URL", "http://10.42.0.1:5000")
+        url = getattr(wifi_setup_module, "SETUP_PAGE_URL",
+                      getattr(wifi_setup_module, "SETUP_URL", "http://10.42.0.1:5000"))
         pwd = getattr(wifi_setup_module, "HOTSPOT_PASSWORD", None)
-        steps = [("1", "मोबाइल में Wi-Fi खोलें और इस नेटवर्क से जुड़ें:", ssid)]
-        if pwd:
-            steps.append(("2", "पासवर्ड डालें:", pwd))
-        steps.append((str(len(steps) + 1), "मोबाइल के ब्राउज़र में यह पता खोलें:", url))
-        steps.append((str(len(steps) + 1), "Wi-Fi और स्थान भरकर सेव करें", ""))
-        return steps
+        return setup_steps(ssid, url, pwd, self.setup_password_mode)
 
     def _show_setup_card(self):
         if self._setup_state == "running":
